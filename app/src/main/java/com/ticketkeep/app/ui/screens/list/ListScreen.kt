@@ -23,26 +23,30 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +55,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -59,6 +64,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.ticketkeep.app.data.model.Ticket
+import com.ticketkeep.app.ui.components.PaperCard
+import com.ticketkeep.app.ui.components.WarrantyStatusChip
 import com.ticketkeep.app.util.DateFormats
 import com.ticketkeep.app.util.ImageStorage
 import com.ticketkeep.app.util.MoneyFormats
@@ -147,7 +154,12 @@ fun ListScreen(
         }
     }
 
+    fun openAddSheet() {
+        tryAdd { showAddSheet = true }
+    }
+
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text("票证记") },
@@ -158,11 +170,18 @@ fun ListScreen(
                         }
                     }
                 },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                ),
             )
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { tryAdd { showAddSheet = true } },
+                onClick = { openAddSheet() },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 3.dp),
+                shape = RoundedCornerShape(16.dp),
             ) {
                 Icon(Icons.Default.Add, contentDescription = "添加票证")
             }
@@ -181,6 +200,7 @@ fun ListScreen(
                 placeholder = { Text("搜索商家或备注") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 singleLine = true,
+                shape = RoundedCornerShape(12.dp),
             )
             Spacer(Modifier.height(8.dp))
             Text(
@@ -194,14 +214,46 @@ fun ListScreen(
             )
             Spacer(Modifier.height(8.dp))
 
-            if (showNotificationBanner) {
-                Card(
+            if (!state.isPro) {
+                PaperCard(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    ),
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    borderColor = MaterialTheme.colorScheme.primaryContainer,
                 ) {
-                    Column(Modifier.padding(12.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "需要更多条数？",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "Pro 可无限保存，本地优先。",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                        }
+                        OutlinedButton(onClick = onOpenPaywall) {
+                            Text("了解 Pro")
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+            }
+
+            if (showNotificationBanner) {
+                PaperCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    borderColor = MaterialTheme.colorScheme.secondaryContainer,
+                ) {
+                    Column(Modifier.padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 Icons.Default.Notifications,
@@ -211,14 +263,14 @@ fun ListScreen(
                             Spacer(Modifier.width(8.dp))
                             Text(
                                 "保修提醒需要通知权限",
-                                style = MaterialTheme.typography.titleSmall,
+                                style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                             )
                         }
                         Spacer(Modifier.height(6.dp))
                         Text(
                             "未开启时，保修到期提醒可能无法送达。可再次授权，或到系统设置中打开。",
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
                         )
                         Spacer(Modifier.height(8.dp))
@@ -253,7 +305,7 @@ fun ListScreen(
                         }
                     }
                 }
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(12.dp))
             }
 
             if (state.tickets.isEmpty()) {
@@ -264,18 +316,33 @@ fun ListScreen(
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text("还没有票证", style = MaterialTheme.typography.titleMedium)
+                    Icon(
+                        Icons.Default.ReceiptLong,
+                        contentDescription = null,
+                        modifier = Modifier.size(64.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Text("还没有票证", style = MaterialTheme.typography.titleLarge)
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "拍照或从相册选择收据，自动 OCR 后可手改保存。",
-                        style = MaterialTheme.typography.bodyMedium,
+                        "添加收据或保修单，到期会提醒你",
+                        style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    Spacer(Modifier.height(20.dp))
+                    Button(
+                        onClick = { openAddSheet() },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.height(48.dp),
+                    ) {
+                        Text("添加第一张")
+                    }
                 }
             } else {
                 LazyColumn(
                     contentPadding = PaddingValues(bottom = 88.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     items(state.tickets, key = { it.id }) { ticket ->
                         TicketRow(ticket = ticket, onClick = { onOpenDetail(ticket.id) })
@@ -343,44 +410,52 @@ fun ListScreen(
             confirmButton = {
                 TextButton(onClick = { showAddSheet = false }) { Text("取消") }
             },
+            shape = RoundedCornerShape(16.dp),
         )
     }
 }
 
 @Composable
 private fun TicketRow(ticket: Ticket, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    PaperCard(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick,
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (!ticket.imagePath.isNullOrBlank()) {
                 AsyncImage(
                     model = File(ticket.imagePath),
                     contentDescription = null,
-                    modifier = Modifier.size(56.dp),
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(12.dp)),
                     contentScale = ContentScale.Crop,
                 )
                 Spacer(Modifier.width(12.dp))
             }
             Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = ticket.merchantName.ifBlank { "未命名商家" },
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    WarrantyStatusChip(warrantyEndEpochDay = ticket.warrantyEndEpochDay)
+                }
+                Spacer(Modifier.height(4.dp))
+                val datePart = DateFormats.formatEpochDay(ticket.purchaseDateEpochDay)
+                val amountPart = MoneyFormats.formatYuan(ticket.amountCents)
                 Text(
-                    text = ticket.merchantName.ifBlank { "未命名商家" },
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = MoneyFormats.formatYuan(ticket.amountCents),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                Text(
-                    text = "保修至 ${DateFormats.formatEpochDay(ticket.warrantyEndEpochDay)}",
+                    text = "$datePart · $amountPart",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -388,7 +463,6 @@ private fun TicketRow(ticket: Ticket, onClick: () -> Unit) {
         }
     }
 }
-
 
 private fun isPostNotificationsGranted(context: android.content.Context): Boolean {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true

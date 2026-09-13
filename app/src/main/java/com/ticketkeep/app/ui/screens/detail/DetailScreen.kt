@@ -12,7 +12,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -21,20 +24,22 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
+import com.ticketkeep.app.ui.components.PaperCard
+import com.ticketkeep.app.ui.components.TallScrollableImage
+import com.ticketkeep.app.ui.components.WarrantyStatusChip
 import com.ticketkeep.app.util.DateFormats
 import com.ticketkeep.app.util.MoneyFormats
-import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,8 +50,10 @@ fun DetailScreen(
 ) {
     val ticket by viewModel.ticket.collectAsStateWithLifecycle()
     var confirmDelete by remember { mutableStateOf(false) }
+    var menuExpanded by remember { mutableStateOf(false) }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text(ticket?.merchantName?.ifBlank { "票证详情" } ?: "票证详情") },
@@ -60,11 +67,29 @@ fun DetailScreen(
                         IconButton(onClick = { onEdit(ticket!!.id) }) {
                             Icon(Icons.Default.Edit, contentDescription = "编辑")
                         }
-                        IconButton(onClick = { confirmDelete = true }) {
-                            Icon(Icons.Default.Delete, contentDescription = "删除")
+                        IconButton(onClick = { menuExpanded = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "更多")
+                        }
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("删除") },
+                                onClick = {
+                                    menuExpanded = false
+                                    confirmDelete = true
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Delete, contentDescription = null)
+                                },
+                            )
                         }
                     }
                 },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                ),
             )
         },
     ) { padding ->
@@ -78,31 +103,51 @@ fun DetailScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
         ) {
             if (!t.imagePath.isNullOrBlank()) {
-                AsyncImage(
-                    model = File(t.imagePath),
+                // 长图整图滚动预览 + 点击放大；非 Crop
+                TallScrollableImage(
+                    imagePath = t.imagePath!!,
                     contentDescription = "收据图片",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(220.dp),
-                    contentScale = ContentScale.Crop,
+                    maxHeight = 280.dp,
+                    corner = 12.dp,
                 )
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(20.dp))
             }
-            DetailLine("商家", t.merchantName.ifBlank { "—" })
-            DetailLine("金额", MoneyFormats.formatYuan(t.amountCents))
-            DetailLine("购买日", DateFormats.formatEpochDay(t.purchaseDateEpochDay))
-            DetailLine("保修月数", t.warrantyMonths?.let { "$it 个月" } ?: "—")
-            DetailLine("保修到期", DateFormats.formatEpochDay(t.warrantyEndEpochDay))
-            DetailLine("备注", t.note.ifBlank { "—" })
+
+            Text(
+                text = t.merchantName.ifBlank { "未命名商家" },
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Spacer(Modifier.height(12.dp))
+            WarrantyStatusChip(
+                warrantyEndEpochDay = t.warrantyEndEpochDay,
+                showNoneLabel = true,
+            )
+            Spacer(Modifier.height(20.dp))
+
+            PaperCard(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp)) {
+                    SparseField("金额", MoneyFormats.formatYuan(t.amountCents))
+                    SparseField("购买日", DateFormats.formatEpochDay(t.purchaseDateEpochDay))
+                    SparseField("保修月数", t.warrantyMonths?.let { "$it 个月" } ?: "—")
+                    SparseField("保修到期", DateFormats.formatEpochDay(t.warrantyEndEpochDay))
+                    SparseField("备注", t.note.ifBlank { "—" }, last = true)
+                }
+            }
+
             if (t.ocrRawText.isNotBlank()) {
-                Spacer(Modifier.height(12.dp))
-                Text("OCR 原文", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(4.dp))
-                Text(t.ocrRawText, style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(16.dp))
+                PaperCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("OCR 原文", style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.height(8.dp))
+                        Text(t.ocrRawText, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
             }
+            Spacer(Modifier.height(24.dp))
         }
     }
 
@@ -122,13 +167,19 @@ fun DetailScreen(
             dismissButton = {
                 TextButton(onClick = { confirmDelete = false }) { Text("取消") }
             },
+            shape = RoundedCornerShape(16.dp),
         )
     }
 }
 
 @Composable
-private fun DetailLine(label: String, value: String) {
-    Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+private fun SparseField(label: String, value: String, last: Boolean = false) {
+    Text(
+        label,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Spacer(Modifier.height(4.dp))
     Text(value, style = MaterialTheme.typography.bodyLarge)
-    Spacer(Modifier.height(12.dp))
+    if (!last) Spacer(Modifier.height(20.dp))
 }

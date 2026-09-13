@@ -6,75 +6,69 @@ import java.util.Locale
 import java.util.regex.Pattern
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.min
 
 /**
- * 启发式解析 OCR 全文：同时覆盖「收银小票」与「保修/报修信息表」。
+ * 启发式解析 OCR 全文：收银小票 + 保修/报修信息表。
  *
- * 策略：
- * 1. 先按「标签 + 值」抽保修单字段（购买日期、保修期限、截止日期、故障描述、商家）。
- * 2. 再回退到小票启发式（合计/¥、首行店名、文中第一个像日期的片段）。
- * 解析失败时对应字段为 null，表单始终可手改。
+ * 保修单常见双列表格会被 ML Kit 读成「先全部左列标签，再全部右列值」。
+ * 因此除了「标签同行/下一行」外，还用「日期类标签出现顺序 ↔ 全文日期出现顺序」做列对齐配对。
  */
 @Singleton
 class TicketOcrParser @Inject constructor() {
 
-    // —— 小票金额：优先「合计/实付」等标签旁的数字，再退到带 ¥ 的金额 ——
     private val amountPatterns = listOf(
-        Pattern.compile("""(?:合计|总计|实付|应付|金额|总金额|收款)[^\d]{0,8}([¥￥]?\s*\d{1,7}(?:\.\d{1,2})?)"""),
+        Pattern.compile("""(?:合计|总计|实付|应付|金额|总金额|收款|维修费用)[^\d]{0,8}([¥￥]?\s*\d{1,7}(?:\.\d{1,2})?)"""),
         Pattern.compile("""([¥￥]\s*\d{1,7}(?:\.\d{1,2})?)"""),
         Pattern.compile("""(\d{1,7}\.\d{2})\s*元?"""),
     )
 
-    // 通用日期片段：2025-03-12 / 2025.03.12 / 2025年3月12日
     private val dateTokenRegex = Pattern.compile(
         """(20\d{2}\s*[-/.年]\s*\d{1,2}\s*[-/.月]\s*\d{1,2}\s*日?)"""
     )
 
-    // 保修期限：「3年」「36个月」「1 年整」等
     private val warrantyPeriodRegex = Pattern.compile(
         """(?:保修期限|保修期|质保期|质保期限)\s*[:：]?\s*(\d+)\s*(年|个月|月)"""
     )
-    private val warrantyPeriodLooseRegex = Pattern.compile(
-        """(\d+)\s*(年|个月|月)\s*(?:保修|质保)?"""
+    private val periodTokenRegex = Pattern.compile("""(\d+)\s*(年|个月|月)""")
+
+    /** 日期类字段：顺序用于双列对齐 */
+    private val purchaseLabels = listOf("购买日期", "购机日期", "购买日", "购置日期", "购入日期")
+    private val repairLabels = listOf("报修日期", "送修日期", "受理日期")
+    private val warrantyEndLabels = listOf(
+        "保修截止日期", "保修到期日", "保修到期", "质保到期", "质保截止日期", "截止日期",
     )
+    private val dateFieldLabels = purchaseLabels + repairLabels + warrantyEndLabels
+
+    private val merchantLabels = listOf(
+        "服务网点", "商家", "门店", "服务商", "销售商", "经销商", "品牌", "厂商",
+    )
+    private val noteLabels = listOf("故障描述", "故障现象", "问题描述", "报修内容", "备注", "说明")
 
     fun parse(rawText: String): OcrParseResult {
-        val normalized = rawText.replace("\u00A0", " ")
+        val normalized = rawText.replace("\u00A0", " ").replace("\r\n", "\n")
         val lines = normalized.lines().map { it.trim() }.filter { it.isNotEmpty() }
         val isWarranty = looksLikeWarrantyForm(normalized)
 
-        val purchase = extractLabeledDate(
-            normalized,
-            listOf("购买日期", "购机日期", "购买日", "购置日期", "购入日期"),
-        ) ?: if (!isWarranty) guessFirstDate(normalized) else null
+        val purchase = extractLabeledDate(normalized, purchaseLabels)
+            ?: extractDateByColumnAlign(normalized, purchaseLabels)
+            ?: if (!isWarranty) findAllDates(normalized).firstOrNull() else null
 
-        val warrantyEnd = extractLabeledDate(
-            normalized,
-            listOf("保修截止日期", "保修到期日", "保修到期", "截止日期", "质保到期", "质保截止日期"),
-        )
+        val warrantyEnd = extractLabeledDate(normalized, warrantyEndLabels)
+            ?: extractDateByColumnAlign(normalized, warrantyEndLabels)
 
         val months = extractWarrantyMonths(normalized)
-        val merchant = extractLabeledValue(
-            lines,
-            listOf("商家", "门店", "服务商", "销售商", "经销商", "品牌", "厂商"),
-        ) ?: guessMerchant(lines, isWarranty)
+            ?: extractPeriodByColumnAlign(normalized)
 
-        val note = extractLabeledMultiline(
-            lines,
-            listOf("故障描述", "故障现象", "问题描述", "报修内容", "备注", "说明"),
-        )
+        val merchant = extractLabeledValue(lines, merchantLabels)
+            ?: guessMerchant(lines, isWarranty)
 
-        // 小票才强求金额；保修单没有金额是正常的
-        val amount = if (isWarranty) {
-            guessAmount(normalized)
-        } else {
-            guessAmount(normalized)
-        }
+        val note = extractLabeledMultiline(lines, noteLabels)
 
         return OcrParseResult(
             rawText = rawText,
             merchantName = merchant,
-            amountCents = amount,
+            amountCents = guessAmount(normalized),
             purchaseDateEpochDay = purchase?.toEpochDay(),
             warrantyMonths = months,
             warrantyEndEpochDay = warrantyEnd?.toEpochDay(),
@@ -83,62 +77,107 @@ class TicketOcrParser @Inject constructor() {
         )
     }
 
-    /** 含保修表典型栏目即视为保修/报修单 */
     private fun looksLikeWarrantyForm(text: String): Boolean {
         val keys = listOf(
             "保修期限", "保修截止", "保修到期", "报修日期", "故障描述",
-            "故障现象", "质保期", "报修单", "保修卡", "保修信息",
+            "故障现象", "质保期", "报修单", "保修卡", "保修信息", "保修单号", "服务网点",
         )
         return keys.any { text.contains(it) }
     }
 
     /**
-     * 在「标签」后同一行或下一行找日期。
-     * OCR 常把表格拆成「购买日期」与「2025-03-12」两行。
+     * 同行 / 下一行 / 标签后短窗口内的日期。
+     * 对「购买日期\n报修日期\n...\n2025-03-12」这种双列拆分无效，需走列对齐。
      */
     private fun extractLabeledDate(text: String, labels: List<String>): LocalDate? {
         val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
         for (i in lines.indices) {
             val line = lines[i]
             val label = labels.firstOrNull { line.contains(it) } ?: continue
-            // 同行：标签后面的日期
             val after = line.substringAfter(label)
             findDateIn(after)?.let { return it }
-            // 下一行常是单元格值
             if (i + 1 < lines.size) {
                 findDateIn(lines[i + 1])?.let { return it }
             }
         }
-        // 全文：标签与日期之间允许少量杂字（同一段落被拼在一起时）
         for (label in labels) {
-            val p = Pattern.compile(
-                Pattern.quote(label) + """[^\d]{0,12}""" + dateTokenRegex.pattern()
-            )
-            val m = p.matcher(text)
-            if (m.find()) {
-                parseDateCandidate(m.group(1))?.let { return it }
-            }
+            val idx = text.indexOf(label)
+            if (idx < 0) continue
+            val window = text.substring(idx + label.length, min(text.length, idx + label.length + 48))
+            findDateIn(window)?.let { return it }
         }
         return null
     }
 
-    private fun findDateIn(chunk: String): LocalDate? {
-        val m = dateTokenRegex.matcher(chunk)
-        while (m.find()) {
-            parseDateCandidate(m.group(1))?.let { return it }
+    /**
+     * 双列对齐：文档中「日期类标签」按出现顺序排，全文日期 token 按出现顺序排，下标对应。
+     * 例：标签序 [购买日期, 报修日期, 保修截止日期] + 日期序 [2025-03-12, 2025-08-21, 2028-03-11]
+     */
+    private fun extractDateByColumnAlign(text: String, targetLabels: List<String>): LocalDate? {
+        // 最长标签优先，避免「购买日」吃掉「购买日期」、「截止日期」吃掉「保修截止日期」
+        val labelHits = findNonOverlappingLabelHits(text, dateFieldLabels)
+        if (labelHits.isEmpty()) return null
+
+        val targetHit = labelHits.firstOrNull { it.first in targetLabels } ?: return null
+        val rankAmongDateLabels = labelHits.indexOf(targetHit)
+        val dates = findAllDates(text)
+        if (rankAmongDateLabels in dates.indices) {
+            return dates[rankAmongDateLabels]
         }
         return null
+    }
+
+    /**
+     * 在全文中找标签出现位置：长标签优先，占用区间不重叠，再按出现顺序排序。
+     */
+    private fun findNonOverlappingLabelHits(
+        text: String,
+        labels: List<String>,
+    ): List<Pair<String, Int>> {
+        val occupied = mutableListOf<IntRange>()
+        val hits = mutableListOf<Pair<String, Int>>()
+        for (label in labels.sortedByDescending { it.length }) {
+            val idx = text.indexOf(label)
+            if (idx < 0) continue
+            val range = idx until (idx + label.length)
+            val overlap = occupied.any { it.first < range.last && range.first < it.last }
+            if (overlap) continue
+            occupied += range
+            hits += label to idx
+        }
+        return hits.sortedBy { it.second }
     }
 
     private fun extractWarrantyMonths(text: String): Int? {
         warrantyPeriodRegex.matcher(text).let { m ->
             if (m.find()) return toMonths(m.group(1), m.group(2))
         }
-        // 宽松：仅当上下文像保修单时，避免把「3年店庆」误当成保修期
-        if (looksLikeWarrantyForm(text)) {
-            warrantyPeriodLooseRegex.matcher(text).let { m ->
+        // 标签同行/下一行
+        val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        for (i in lines.indices) {
+            if (!lines[i].contains("保修期限") && !lines[i].contains("质保期")) continue
+            val after = lines[i].substringAfter("保修期限").substringAfter("质保期")
+            periodTokenRegex.matcher(after).let { m ->
                 if (m.find()) return toMonths(m.group(1), m.group(2))
             }
+            if (i + 1 < lines.size) {
+                periodTokenRegex.matcher(lines[i + 1]).let { m ->
+                    if (m.find()) return toMonths(m.group(1), m.group(2))
+                }
+            }
+        }
+        return null
+    }
+
+    /** 双列时「保修期限」常与「3年」不对齐到同行，在全文 period token 里取第一个合理年/月 */
+    private fun extractPeriodByColumnAlign(text: String): Int? {
+        if (!text.contains("保修期限") && !text.contains("质保期")) return null
+        val m = periodTokenRegex.matcher(text)
+        while (m.find()) {
+            val months = toMonths(m.group(1), m.group(2)) ?: continue
+            // 过滤明显不是保修期的「2025年」——periodToken 不该吃到四位数年份，因模式是 (\d+)年
+            // 但「2025年」会匹配 2025+年 → 24200 月，toMonths 有上限
+            if (months in 1..120) return months
         }
         return null
     }
@@ -146,13 +185,15 @@ class TicketOcrParser @Inject constructor() {
     private fun toMonths(num: String, unit: String): Int? {
         val n = num.toIntOrNull() ?: return null
         if (n !in 1..1200) return null
-        return when {
+        val months = when {
             unit.startsWith("年") -> n * 12
             else -> n
         }
+        // 「2025年」会被弄成 24300，直接丢弃
+        if (months > 1200) return null
+        return months
     }
 
-    /** 标签同行取值；若值太短/像日期则看下一行 */
     private fun extractLabeledValue(lines: List<String>, labels: List<String>): String? {
         for (i in lines.indices) {
             val line = lines[i]
@@ -163,10 +204,11 @@ class TicketOcrParser @Inject constructor() {
             if (value.isBlank() && i + 1 < lines.size) {
                 value = lines[i + 1].trim()
             }
-            if (value.length in 2..40 && findDateIn(value) == null) {
+            if (value.length in 2..40 && findDateIn(value) == null && !looksLikeFieldLabel(value)) {
                 return value
             }
         }
+        // 双列：标签块之后的值块，按 merchant 标签在全部标签中的序配对（简化：取含「中心/店/公司」的值行）
         return null
     }
 
@@ -178,40 +220,67 @@ class TicketOcrParser @Inject constructor() {
                 .replace(Regex("""^[\s:：\-—_|]+"""), "")
                 .trim()
             val buf = mutableListOf<String>()
-            if (same.isNotBlank()) buf += same
-            // 随后若干行直到碰到下一个像标签的行
+            if (same.isNotBlank() && !looksLikeFieldLabel(same)) buf += same
             var j = i + 1
             while (j < lines.size && buf.size < 6) {
                 val next = lines[j]
                 if (looksLikeFieldLabel(next)) break
+                // 双列模式下下一行可能是下一个标签，已由 looksLikeFieldLabel 拦住
+                // 值块里的故障描述往往在后半段；若下一行仍是短标签则停
                 buf += next
                 j++
             }
             val joined = buf.joinToString("\n").trim()
-            if (joined.isNotBlank()) return joined
+            if (joined.isNotBlank() && findDateIn(joined) == null) return joined
         }
-        return null
+        // 双列兜底：故障描述标签在标签区，描述正文在值区——用「故障描述」在 date/note 标签序之后的文本块
+        return extractNoteByColumnAlign(lines)
+    }
+
+    private fun extractNoteByColumnAlign(lines: List<String>): String? {
+        val labelIdx = lines.indexOfFirst { line -> noteLabels.any { line == it || line.startsWith(it) } }
+        if (labelIdx < 0) return null
+        // 双列：故障描述标签之后仍是其它标签，真正正文在值列。
+        // 优先「故障/异常」等强语义，避免先命中「黑屏/无法」导致字段偏弱。
+        val candidates = lines.drop(labelIdx + 1).filter { line ->
+            line.length >= 6 &&
+                !looksLikeFieldLabel(line) &&
+                findDateIn(line) == null &&
+                !periodTokenRegex.matcher(line).find() &&
+                !line.matches(Regex("""^[A-Z0-9\-*￥¥.\s]+$"""))
+        }
+        val strongKeys = listOf("故障", "异常")
+        val weakKeys = listOf("坏", "黑屏", "死机", "无法", "失灵", "重启", "掉线", "丢失")
+        val strongHit = candidates.firstOrNull { line -> strongKeys.any { line.contains(it) } }
+        if (strongHit != null) return strongHit
+        val weakHit = candidates.firstOrNull { line -> weakKeys.any { line.contains(it) } }
+        if (weakHit != null) return weakHit
+        return candidates.filter { it.length >= 10 }.maxByOrNull { it.length }
     }
 
     private fun looksLikeFieldLabel(line: String): Boolean {
         val labels = listOf(
-            "购买日期", "报修日期", "保修期限", "保修截止", "故障描述",
+            "保修单号", "客户姓名", "联系电话", "产品名称", "产品型号", "产品序列号",
+            "购买日期", "报修日期", "保修期限", "保修截止", "故障描述", "检测结果",
+            "处理方式", "维修费用", "维修状态", "服务网点", "技术人员",
             "商家", "门店", "金额", "合计", "实付", "备注",
         )
-        return labels.any { line.startsWith(it) || line == it }
+        return labels.any { line == it || line.startsWith(it) }
     }
 
     private fun guessMerchant(lines: List<String>, isWarranty: Boolean): String? {
         val skip = listOf(
             "小票", "收据", "发票", "收银", "谢谢", "欢迎", "合计", "总计", "实付",
-            "保修", "报修", "故障", "日期", "期限", "公司", "表格",
+            "保修", "报修", "故障", "日期", "期限", "表格", "内容",
         )
-        // 保修单：优先带「卡/单/信息」的标题行里的品牌片段，否则取较短的非标签首行
         if (isWarranty) {
-            lines.firstOrNull { it.contains("保修") || it.contains("报修") || it.contains("质保") }
+            lines.firstOrNull { it.contains("中心") || it.contains("服务") || it.contains("4S") }
+                ?.takeIf { it.length in 2..30 && !looksLikeFieldLabel(it) }
+                ?.let { return it }
+            lines.firstOrNull { it.contains("保修") || it.contains("报修") }
                 ?.let { title ->
                     val cleaned = title
-                        .replace(Regex("""保修卡|保修单|报修单|保修信息|质保卡|信息表|登记表"""), "")
+                        .replace(Regex("""保修卡|保修单|报修单|保修信息|质保卡|信息表|登记表|内容"""), "")
                         .trim()
                     if (cleaned.length in 2..20) return cleaned
                 }
@@ -240,7 +309,8 @@ class TicketOcrParser @Inject constructor() {
                 } catch (_: NumberFormatException) {
                     continue
                 }
-                if (cents in 1..99_999_999) {
+                // 保修单常见 ¥0，允许 0；小票 0 也无妨
+                if (cents in 0..99_999_999) {
                     best = cents
                 }
             }
@@ -249,7 +319,18 @@ class TicketOcrParser @Inject constructor() {
         return null
     }
 
-    private fun guessFirstDate(text: String): LocalDate? = findDateIn(text)
+    private fun findAllDates(text: String): List<LocalDate> {
+        val out = mutableListOf<LocalDate>()
+        val seen = mutableSetOf<Long>()
+        val m = dateTokenRegex.matcher(text)
+        while (m.find()) {
+            val d = parseDateCandidate(m.group(1)) ?: continue
+            if (seen.add(d.toEpochDay())) out += d
+        }
+        return out
+    }
+
+    private fun findDateIn(chunk: String): LocalDate? = findAllDates(chunk).firstOrNull()
 
     private fun parseDateCandidate(raw: String): LocalDate? {
         val compact = raw.replace(Regex("""\s+"""), "")

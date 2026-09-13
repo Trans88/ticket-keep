@@ -82,6 +82,27 @@ app/src/main/java/com/ticketkeep/app/
 - 备份 / 设备迁移：**不得**把 `ticket_keep.db*` 和 `ticket_images/` 打进云备份。
 - 图片只存应用私有目录；删除票证时删对应文件（见 `DetailViewModel`）。
 
+## 代码与测试要求（强制）
+
+### 类注释
+- **每个类**（含 `data class`、`object`、重要的文件级顶层声明若承担独立职责）都必须有 **KDoc 类注释**：说明职责、边界、关键协作对象；不要写废话注释。
+- 新增/改动公共 API、OCR 解析规则、提醒调度、Repository 等「为什么这么做」的逻辑，在方法上补简洁中文注释。
+
+### 单元测试（AI / 开发者自行跑通）
+- **主要功能必须有单元测试**，并且改完后要 **自己在本机执行并确认通过**，不能只写测试不跑。
+- 优先 JVM 单测（不依赖真机）：如 `TicketOcrParser`、金额/日期工具、Repository 规则等。
+- 建议命令（在工程根目录）：
+  ```bash
+  ./gradlew.bat :app:testDebugUnitTest
+  ```
+  或只跑某一类：
+  ```bash
+  ./gradlew.bat :app:testDebugUnitTest --tests "com.ticketkeep.app.ocr.TicketOcrParserTest"
+  ```
+- 向用户回报时写明：跑了哪些测试、通过/失败、失败原因；失败则先修到绿再交付。
+- UI / ML Kit 真机路径可用手工验证补充，但 **解析与业务规则不能只靠手工**。
+
+
 ## 构建与验证
 
 ```bash

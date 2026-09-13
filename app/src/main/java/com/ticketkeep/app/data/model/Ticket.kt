@@ -1,0 +1,19 @@
+package com.ticketkeep.app.data.model
+
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+
+@Entity(tableName = "tickets")
+data class Ticket(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val merchantName: String = "",
+    val amountCents: Long? = null,
+    val purchaseDateEpochDay: Long? = null,
+    val warrantyMonths: Int? = null,
+    val warrantyEndEpochDay: Long? = null,
+    val note: String = "",
+    val imagePath: String? = null,
+    val ocrRawText: String = "",
+    val createdAtMillis: Long = System.currentTimeMillis(),
+    val updatedAtMillis: Long = System.currentTimeMillis(),
+)

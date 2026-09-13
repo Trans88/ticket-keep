@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">票证记</string>
+    <string name="notification_channel_warranty">保修到期提醒</string>
+    <string name="notification_channel_desc">在保修到期前发送本地提醒</string>
+</resources>

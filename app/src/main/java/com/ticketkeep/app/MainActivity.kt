@@ -1,6 +1,7 @@
 package com.ticketkeep.app
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -10,8 +11,11 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -25,24 +29,28 @@ import com.ticketkeep.app.ui.screens.list.ListScreen
 import com.ticketkeep.app.ui.screens.paywall.PaywallScreen
 import com.ticketkeep.app.ui.theme.TicketKeepTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.MutableStateFlow
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
+    private val openTicketIdState = MutableStateFlow(-1L)
+
     private val notificationPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* no-op */ }
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* ListScreen 展示再申请入口 */ }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         requestNotificationPermissionIfNeeded()
-
-        val openTicketId = intent?.getLongExtra(WarrantyReminderWorker.EXTRA_TICKET_ID, -1L) ?: -1L
+        handleOpenTicketIntent(intent)
 
         setContent {
             TicketKeepTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     val navController = rememberNavController()
+                    val openTicketId by openTicketIdState.collectAsStateWithLifecycle()
+
                     NavHost(
                         navController = navController,
                         startDestination = Routes.LIST,
@@ -97,13 +105,29 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    if (openTicketId > 0) {
-                        androidx.compose.runtime.LaunchedEffect(openTicketId) {
-                            navController.navigate(Routes.detail(openTicketId))
+                    LaunchedEffect(openTicketId) {
+                        if (openTicketId > 0) {
+                            navController.navigate(Routes.detail(openTicketId)) {
+                                launchSingleTop = true
+                            }
+                            openTicketIdState.value = -1L
                         }
                     }
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleOpenTicketIntent(intent)
+    }
+
+    private fun handleOpenTicketIntent(intent: Intent?) {
+        val id = intent?.getLongExtra(WarrantyReminderWorker.EXTRA_TICKET_ID, -1L) ?: -1L
+        if (id > 0L) {
+            openTicketIdState.value = id
         }
     }
 

@@ -33,25 +33,30 @@ class WarrantyReminderWorker @AssistedInject constructor(
         val ticket = ticketDao.getById(ticketId) ?: return Result.success()
         val endDay = ticket.warrantyEndEpochDay ?: return Result.success()
         val today = LocalDate.now().toEpochDay()
-        // 仅在目标提醒日当天附近发送（避免过期后仍弹）
         val target = endDay - daysBefore
+
+        // 保修已结束后不再提醒
         if (today > endDay) return Result.success()
-        if (kotlin.math.abs(today - target) > 1) return Result.success()
+        // 尚未到提醒日起点（过早）则跳过；允许 Doze/厂商延迟导致晚于 target 仍发送
+        if (today < target) return Result.success()
 
         ensureChannel()
-        val title = when (daysBefore) {
-            0 -> "保修今日到期"
-            1 -> "保修明天到期"
-            else -> "保修还有 $daysBefore 天到期"
+        val title = when {
+            today >= endDay -> "保修今日到期"
+            daysBefore <= 1 || today >= endDay - 1 -> "保修即将到期"
+            else -> "保修还有 ${endDay - today} 天到期"
         }
         val body = buildString {
             append(ticket.merchantName.ifBlank { "未命名票证" })
             append(" · 到期日 ")
             append(DateFormats.formatEpochDay(endDay))
+            if (today > target) {
+                append("（延迟送达）")
+            }
         }
 
         val intent = Intent(applicationContext, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra(EXTRA_TICKET_ID, ticketId)
         }
         val pending = PendingIntent.getActivity(

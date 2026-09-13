@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
     <exclude domain="sharedpref" path="device.xml" />
+    <!-- 收据隐私：不备份 Room 数据库与本地票证图片 -->
+    <exclude domain="database" path="ticket_keep.db" />
+    <exclude domain="database" path="ticket_keep.db-shm" />
+    <exclude domain="database" path="ticket_keep.db-wal" />
+    <exclude domain="file" path="ticket_images" />
 </full-backup-content>

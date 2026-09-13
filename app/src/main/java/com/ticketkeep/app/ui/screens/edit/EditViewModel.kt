@@ -7,17 +7,18 @@ import androidx.lifecycle.viewModelScope
 import com.ticketkeep.app.data.model.Ticket
 import com.ticketkeep.app.data.repository.TicketRepository
 import com.ticketkeep.app.ocr.MlKitOcrHelper
+import com.ticketkeep.app.ocr.OcrParseResult
 import com.ticketkeep.app.util.DateFormats
 import com.ticketkeep.app.util.ImageStorage
 import com.ticketkeep.app.util.MoneyFormats
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.time.LocalDate
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.time.LocalDate
 
 data class EditUiState(
     val ticketId: Long = 0L,
@@ -30,6 +31,8 @@ data class EditUiState(
     val imagePath: String? = null,
     val ocrRawText: String = "",
     val isOcrRunning: Boolean = false,
+    /** 本次新建是否已经跑过 OCR（用于展示「识别原文」区块） */
+    val ocrAttempted: Boolean = false,
     val isSaving: Boolean = false,
     val errorMessage: String? = null,
     val useManualWarrantyEnd: Boolean = false,
@@ -77,38 +80,92 @@ class EditViewModel @Inject constructor(
                 note = ticket.note,
                 imagePath = ticket.imagePath,
                 ocrRawText = ticket.ocrRawText,
+                ocrAttempted = ticket.ocrRawText.isNotBlank(),
                 useManualWarrantyEnd = ticket.warrantyMonths == null && ticket.warrantyEndEpochDay != null,
             )
         }
     }
 
+    /**
+     * 新建带图：先把 URI 落盘（消费一次性 content 流），再对本地文件做 OCR。
+     * 切勿 persist 后再 recognize(原 uri)——Photo Picker 流常只能读一次，会导致 ML Kit 得到空图/空字。
+     */
     private suspend fun ingestNewImage(uri: Uri) {
-        _uiState.update { it.copy(isOcrRunning = true, errorMessage = null) }
+        _uiState.update {
+            it.copy(isOcrRunning = true, errorMessage = null, ocrAttempted = false)
+        }
         val path = imageStorage.persistImage(uri)
-        val parse = try {
-            ocrHelper.recognize(uri)
-        } catch (e: Exception) {
+        if (path.isNullOrBlank()) {
             _uiState.update {
                 it.copy(
                     isOcrRunning = false,
-                    imagePath = path,
-                    errorMessage = "OCR 失败：${e.message ?: "未知错误"}，请手填",
+                    ocrAttempted = true,
+                    purchaseDate = LocalDate.now(),
+                    warrantyMonthsText = "12",
+                    warrantyEndDate = LocalDate.now().plusMonths(12),
+                    errorMessage = "无法读取图片。请换一张图，或用「拍照」重试。",
                 )
             }
             return
         }
-        val purchase = parse.purchaseDateEpochDay?.let(DateFormats::epochDayToLocalDate) ?: LocalDate.now()
-        val months = 12
+        val parse = try {
+            ocrHelper.recognizeFile(path)
+        } catch (e: Exception) {
+            _uiState.update {
+                it.copy(
+                    isOcrRunning = false,
+                    ocrAttempted = true,
+                    imagePath = path,
+                    purchaseDate = LocalDate.now(),
+                    warrantyMonthsText = "12",
+                    warrantyEndDate = LocalDate.now().plusMonths(12),
+                    errorMessage = "OCR 失败：${e.message ?: "未知错误"}。请对照照片手填，或换更清晰的图重试。",
+                )
+            }
+            return
+        }
+        applyOcrResult(path, parse)
+    }
+
+    private fun applyOcrResult(path: String?, parse: OcrParseResult) {
+        val rawBlank = parse.rawText.isBlank()
+        val purchase = parse.purchaseDateEpochDay?.let(DateFormats::epochDayToLocalDate)
+        val endFromOcr = parse.warrantyEndEpochDay?.let(DateFormats::epochDayToLocalDate)
+        val months = parse.warrantyMonths
+            ?: if (parse.isWarrantyForm) null else 12
+
+        val useManualEnd = endFromOcr != null
+        val purchaseOrToday = purchase ?: LocalDate.now()
+        val endDate = when {
+            endFromOcr != null -> endFromOcr
+            months != null -> purchaseOrToday.plusMonths(months.toLong())
+            else -> null
+        }
+
+        val hint = when {
+            rawBlank ->
+                "未能识别出文字（图片已保存）。请确认重装了最新包；仍失败可换拍照或手填。"
+            parse.merchantName == null && purchase == null && months == null && endFromOcr == null ->
+                "已得到识别原文，但未能自动解析字段。请对照下方原文手改。"
+            parse.isWarrantyForm && purchase == null ->
+                "已按保修单解析部分字段；购买日期未识别到，已暂用今天，请核对原文。"
+            else -> null
+        }
+
         _uiState.update {
             it.copy(
                 isOcrRunning = false,
+                ocrAttempted = true,
                 imagePath = path,
                 merchantName = parse.merchantName.orEmpty(),
                 amountText = MoneyFormats.centsToYuanString(parse.amountCents),
-                purchaseDate = purchase,
-                warrantyMonthsText = months.toString(),
-                warrantyEndDate = purchase.plusMonths(months.toLong()),
+                purchaseDate = purchaseOrToday,
+                warrantyMonthsText = months?.toString().orEmpty(),
+                warrantyEndDate = endDate,
+                useManualWarrantyEnd = useManualEnd,
+                note = parse.note.orEmpty(),
                 ocrRawText = parse.rawText,
+                errorMessage = hint,
             )
         }
     }
@@ -120,21 +177,25 @@ class EditViewModel @Inject constructor(
     fun updatePurchaseDate(date: LocalDate) {
         _uiState.update { state ->
             val end = if (!state.useManualWarrantyEnd) {
-                val months = state.warrantyMonthsText.toIntOrNull() ?: 0
-                date.plusMonths(months.toLong())
-            } else state.warrantyEndDate
+                val m = state.warrantyMonthsText.toIntOrNull() ?: 0
+                date.plusMonths(m.toLong())
+            } else {
+                state.warrantyEndDate
+            }
             state.copy(purchaseDate = date, warrantyEndDate = end)
         }
     }
 
     fun updateWarrantyMonths(text: String) {
         _uiState.update { state ->
-            val months = text.filter { it.isDigit() }
+            val monthsDigits = text.filter { it.isDigit() }
             val end = if (!state.useManualWarrantyEnd) {
-                val m = months.toIntOrNull() ?: 0
+                val m = monthsDigits.toIntOrNull() ?: 0
                 state.purchaseDate?.plusMonths(m.toLong())
-            } else state.warrantyEndDate
-            state.copy(warrantyMonthsText = months, warrantyEndDate = end)
+            } else {
+                state.warrantyEndDate
+            }
+            state.copy(warrantyMonthsText = monthsDigits, warrantyEndDate = end)
         }
     }
 

@@ -1,6 +1,10 @@
 package com.ticketkeep.app.ui.screens.list
 
 import android.Manifest
+import android.app.Activity
+import android.content.Intent
+import android.os.Build
+import android.provider.Settings
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -24,6 +28,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -61,6 +66,10 @@ import java.io.File
 import kotlinx.coroutines.launch
 import android.content.pm.PackageManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.runtime.DisposableEffect
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,6 +87,32 @@ fun ListScreen(
     var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
 
     val imageStorage = remember { ImageStorage(context.applicationContext) }
+
+    var notificationGranted: Boolean by remember {
+        mutableStateOf(isPostNotificationsGranted(context))
+    }
+    var notificationBannerDismissed: Boolean by remember { mutableStateOf(false) }
+    var notificationRequestedOnce: Boolean by remember { mutableStateOf(false) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                notificationGranted = isPostNotificationsGranted(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    val showNotificationBanner =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            !notificationGranted &&
+            !notificationBannerDismissed
+
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        notificationGranted = granted || isPostNotificationsGranted(context)
+    }
 
     val pickMedia = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
@@ -158,6 +193,68 @@ fun ListScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(8.dp))
+
+            if (showNotificationBanner) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    ),
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Notifications,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "保修提醒需要通知权限",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            )
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "未开启时，保修到期提醒可能无法送达。可再次授权，或到系统设置中打开。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            TextButton(onClick = { notificationBannerDismissed = true }) {
+                                Text("稍后")
+                            }
+                            TextButton(
+                                onClick = {
+                                    val activity = context as? Activity
+                                    val shouldShow = activity?.shouldShowRequestPermissionRationale(
+                                        Manifest.permission.POST_NOTIFICATIONS,
+                                    ) == true
+                                    val openSettings = notificationRequestedOnce && !shouldShow
+                                    if (openSettings) {
+                                        val intent = Intent(
+                                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                            Uri.fromParts("package", context.packageName, null),
+                                        )
+                                        context.startActivity(intent)
+                                    } else {
+                                        notificationRequestedOnce = true
+                                        notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                    }
+                                },
+                            ) {
+                                Text("去开启")
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
 
             if (state.tickets.isEmpty()) {
                 Column(
@@ -290,4 +387,13 @@ private fun TicketRow(ticket: Ticket, onClick: () -> Unit) {
             }
         }
     }
+}
+
+
+private fun isPostNotificationsGranted(context: android.content.Context): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
+    return ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.POST_NOTIFICATIONS,
+    ) == PackageManager.PERMISSION_GRANTED
 }

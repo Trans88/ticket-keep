@@ -6,14 +6,17 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -93,12 +96,18 @@ fun EditScreen(
             if (!state.imagePath.isNullOrBlank()) {
                 AsyncImage(
                     model = File(state.imagePath!!),
-                    contentDescription = null,
+                    contentDescription = "票证图片",
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(180.dp),
                     contentScale = ContentScale.Crop,
                 )
+                Spacer(Modifier.height(12.dp))
+            }
+
+            // 识别原文放在表单上方，便于核对保修表是否被 ML Kit 读出
+            if (state.ocrAttempted) {
+                OcrRawTextCard(rawText = state.ocrRawText)
                 Spacer(Modifier.height(12.dp))
             }
 
@@ -113,7 +122,7 @@ fun EditScreen(
             OutlinedTextField(
                 value = state.amountText,
                 onValueChange = viewModel::updateAmount,
-                label = { Text("金额（元）") },
+                label = { Text("金额（元，可空）") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -154,16 +163,10 @@ fun EditScreen(
             OutlinedTextField(
                 value = state.note,
                 onValueChange = viewModel::updateNote,
-                label = { Text("备注") },
+                label = { Text("备注 / 故障描述") },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 2,
             )
-
-            if (state.ocrRawText.isNotBlank()) {
-                Spacer(Modifier.height(8.dp))
-                Text("OCR 原文（只读）", style = MaterialTheme.typography.labelLarge)
-                Text(state.ocrRawText, style = MaterialTheme.typography.bodySmall)
-            }
 
             Spacer(Modifier.height(20.dp))
             Button(
@@ -195,6 +198,41 @@ fun EditScreen(
                 showWarrantyPicker = false
             },
         )
+    }
+}
+
+@Composable
+private fun OcrRawTextCard(rawText: String) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ),
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Text(
+                "识别原文（只读）",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = if (rawText.isBlank()) {
+                    "（空）ML Kit 未返回文字，请检查拍照角度与清晰度。"
+                } else {
+                    rawText
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = if (rawText.isBlank()) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 64.dp, max = 220.dp)
+                    .verticalScroll(rememberScrollState()),
+            )
+        }
     }
 }
 

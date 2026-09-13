@@ -7,6 +7,9 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+/**
+ * TicketOcrParser 单测：小票与保修单（含双列）解析。
+ */
 class TicketOcrParserTest {
 
     private val parser = TicketOcrParser()

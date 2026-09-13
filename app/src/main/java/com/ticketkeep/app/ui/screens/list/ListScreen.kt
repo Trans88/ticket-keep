@@ -27,13 +27,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
@@ -57,12 +59,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.ticketkeep.app.R
 import com.ticketkeep.app.data.model.Ticket
 import com.ticketkeep.app.ui.components.PaperCard
 import com.ticketkeep.app.ui.components.WarrantyStatusChip
@@ -77,6 +83,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import com.ticketkeep.app.export.ExportShareHelper
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,12 +94,15 @@ fun ListScreen(
     onCreateWithImage: (Uri) -> Unit,
     onCreateBlank: () -> Unit,
     onOpenPaywall: () -> Unit,
+    onOpenPrivacy: () -> Unit = {},
     viewModel: ListViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var showAddSheet by remember { mutableStateOf(false) }
+    var showOverflow by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
     var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
 
     val imageStorage = remember { ImageStorage(context.applicationContext) }
@@ -158,8 +170,33 @@ fun ListScreen(
         tryAdd { showAddSheet = true }
     }
 
+    fun launchGallery() {
+        tryAdd {
+            pickMedia.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+            )
+        }
+    }
+
+    fun launchCamera() {
+        tryAdd {
+            val granted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.CAMERA,
+            ) == PackageManager.PERMISSION_GRANTED
+            if (granted) {
+                val (uri, _) = imageStorage.createCameraCacheUri()
+                pendingCameraUri = uri
+                takePicture.launch(uri)
+            } else {
+                cameraPermission.launch(Manifest.permission.CAMERA)
+            }
+        }
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("票证记") },
@@ -168,6 +205,55 @@ fun ListScreen(
                         IconButton(onClick = onOpenPaywall) {
                             Icon(Icons.Default.WorkspacePremium, contentDescription = "升级 Pro")
                         }
+                    }
+                    IconButton(onClick = { showOverflow = true }) {
+                        Icon(
+                            Icons.Default.MoreVert,
+                            contentDescription = stringResource(R.string.more_options),
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showOverflow,
+                        onDismissRequest = { showOverflow = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("导出全部 CSV") },
+                            onClick = {
+                                showOverflow = false
+                                viewModel.exportAllCsv(
+                                    onNeedPro = onOpenPaywall,
+                                    onSuccess = { file ->
+                                        try {
+                                            ExportShareHelper.shareFile(
+                                                context,
+                                                file,
+                                                "text/csv",
+                                                "分享票证 CSV",
+                                            )
+                                            scope.launch {
+                                                snackbarHostState.showSnackbar("已导出 CSV")
+                                            }
+                                        } catch (_: Exception) {
+                                            scope.launch {
+                                                snackbarHostState.showSnackbar("分享失败")
+                                            }
+                                        }
+                                    },
+                                    onError = { msg ->
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar(msg)
+                                        }
+                                    },
+                                )
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.privacy_policy)) },
+                            onClick = {
+                                showOverflow = false
+                                onOpenPrivacy()
+                            },
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -317,26 +403,47 @@ fun ListScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Icon(
-                        Icons.Default.ReceiptLong,
+                        painter = painterResource(R.drawable.ic_empty_ticket),
                         contentDescription = null,
                         modifier = Modifier.size(64.dp),
                         tint = MaterialTheme.colorScheme.primary,
                     )
                     Spacer(Modifier.height(16.dp))
-                    Text("还没有票证", style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        stringResource(R.string.empty_title),
+                        style = MaterialTheme.typography.titleLarge,
+                        textAlign = TextAlign.Center,
+                    )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "添加收据或保修单，到期会提醒你",
+                        stringResource(R.string.empty_body),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
                     )
                     Spacer(Modifier.height(20.dp))
                     Button(
-                        onClick = { openAddSheet() },
+                        onClick = { launchCamera() },
                         shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.height(48.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
                     ) {
-                        Text("添加第一张")
+                        Icon(Icons.Default.CameraAlt, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.empty_action_camera))
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = { launchGallery() },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                    ) {
+                        Icon(Icons.Default.PhotoLibrary, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.empty_action_gallery))
                     }
                 }
             } else {
@@ -361,11 +468,7 @@ fun ListScreen(
                     TextButton(
                         onClick = {
                             showAddSheet = false
-                            tryAdd {
-                                pickMedia.launch(
-                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                                )
-                            }
+                            launchGallery()
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
@@ -376,19 +479,7 @@ fun ListScreen(
                     TextButton(
                         onClick = {
                             showAddSheet = false
-                            tryAdd {
-                                val granted = ContextCompat.checkSelfPermission(
-                                    context,
-                                    Manifest.permission.CAMERA,
-                                ) == PackageManager.PERMISSION_GRANTED
-                                if (granted) {
-                                    val (uri, _) = imageStorage.createCameraCacheUri()
-                                    pendingCameraUri = uri
-                                    takePicture.launch(uri)
-                                } else {
-                                    cameraPermission.launch(Manifest.permission.CAMERA)
-                                }
-                            }
+                            launchCamera()
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {

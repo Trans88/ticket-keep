@@ -20,6 +20,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+/**
+ * 编辑页 UI 状态：表单字段、OCR 进度与错误提示。
+ */
 data class EditUiState(
     val ticketId: Long = 0L,
     val merchantName: String = "",

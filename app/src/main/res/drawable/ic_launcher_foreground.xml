@@ -1,13 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 自适应图标前景：白票证 + 薄荷条 + 勾选徽章（viewport 108） -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- 白票证 roundRect (30,26) 48x58 r6 -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M30,28h48c2.2,0 4,1.8 4,4v44c0,2.2 -1.8,4 -4,4H30c-2.2,0 -4,-1.8 -4,-4V32c0,-2.2 1.8,-4 4,-4z" />
+        android:pathData="M36,26 L72,26 Q78,26 78,32 L78,78 Q78,84 72,84 L36,84 Q30,84 30,78 L30,32 Q30,26 36,26 Z" />
+    <!-- 条 1 (38,40) 32x4 -->
     <path
-        android:fillColor="#1565C0"
-        android:pathData="M36,40h36v4H36zM36,50h28v4H36zM36,60h20v4H36z" />
+        android:fillColor="#0F766E"
+        android:pathData="M38,40h32v4h-32z" />
+    <!-- 条 2 (38,50) 24x4 -->
+    <path
+        android:fillColor="#0F766E"
+        android:pathData="M38,50h24v4h-24z" />
+    <!-- 勾选徽章 roundRect (54,60) 18x18 r5 -->
+    <path
+        android:fillColor="#0F766E"
+        android:pathData="M59,60 L67,60 Q72,60 72,65 L72,73 Q72,78 67,78 L59,78 Q54,78 54,73 L54,65 Q54,60 59,60 Z" />
+    <!-- 勾 path M58,69 L62,73 L70,64 -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M58,69 L62,73 L70,64"
+        android:strokeWidth="2.5"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
 </vector>

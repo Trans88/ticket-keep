@@ -9,6 +9,9 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * 票证图片本地落盘与相机缓存 Uri 创建。
+ */
 @Singleton
 class ImageStorage @Inject constructor(
     @ApplicationContext private val context: Context,

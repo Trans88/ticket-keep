@@ -1,10 +1,14 @@
 package com.ticketkeep.app.ui.navigation
 
+/**
+ * Compose Navigation 路由常量与参数拼装。
+ */
 object Routes {
     const val LIST = "list"
     const val DETAIL = "detail/{ticketId}"
     const val EDIT = "edit?ticketId={ticketId}&imageUri={imageUri}"
     const val PAYWALL = "paywall"
+    const val PRIVACY = "privacy"
 
     fun detail(ticketId: Long) = "detail/$ticketId"
 

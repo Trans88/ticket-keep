@@ -9,6 +9,9 @@ import androidx.room.Update
 import com.ticketkeep.app.data.model.Ticket
 import kotlinx.coroutines.flow.Flow
 
+/**
+ * Room DAO：票证的增删改查与观察流。
+ */
 @Dao
 interface TicketDao {
     @Query(
@@ -25,6 +28,9 @@ interface TicketDao {
 
     @Query("SELECT * FROM tickets WHERE id = :id")
     suspend fun getById(id: Long): Ticket?
+
+    @Query("SELECT * FROM tickets ORDER BY createdAtMillis DESC")
+    suspend fun getAll(): List<Ticket>
 
     @Query("SELECT COUNT(*) FROM tickets")
     suspend fun count(): Int

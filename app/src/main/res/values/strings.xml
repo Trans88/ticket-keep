@@ -3,4 +3,15 @@
     <string name="app_name">票证记</string>
     <string name="notification_channel_warranty">保修到期提醒</string>
     <string name="notification_channel_desc">在保修到期前发送本地提醒</string>
+
+    <string name="empty_title">还没有票证</string>
+    <string name="empty_body">拍一张收据或保修卡，开始记起来。</string>
+    <string name="empty_action_camera">拍照添加</string>
+    <string name="empty_action_gallery">从相册选</string>
+
+    <string name="privacy_policy">隐私政策</string>
+    <string name="privacy_policy_title">隐私政策</string>
+    <string name="more_options">更多</string>
+
+    <string name="store_short_desc">本地收据与保修管家：拍照识别、到期提醒，免费 10 条，数据默认只留本机。</string>
 </resources>

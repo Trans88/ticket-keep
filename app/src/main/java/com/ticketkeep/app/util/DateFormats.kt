@@ -6,6 +6,9 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+/**
+ * 日期 epochDay 与展示文案格式化工具。
+ */
 object DateFormats {
     private val zone: ZoneId get() = ZoneId.systemDefault()
     val display: DateTimeFormatter =

@@ -40,20 +40,31 @@ import com.ticketkeep.app.ui.components.TallScrollableImage
 import com.ticketkeep.app.ui.components.WarrantyStatusChip
 import com.ticketkeep.app.util.DateFormats
 import com.ticketkeep.app.util.MoneyFormats
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import com.ticketkeep.app.export.ExportShareHelper
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DetailScreen(
     onBack: () -> Unit,
     onEdit: (Long) -> Unit,
+    onOpenPaywall: () -> Unit = {},
     viewModel: DetailViewModel = hiltViewModel(),
 ) {
     val ticket by viewModel.ticket.collectAsStateWithLifecycle()
     var confirmDelete by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(ticket?.merchantName?.ifBlank { "票证详情" } ?: "票证详情") },
@@ -74,6 +85,37 @@ fun DetailScreen(
                             expanded = menuExpanded,
                             onDismissRequest = { menuExpanded = false },
                         ) {
+                            DropdownMenuItem(
+                                text = { Text("导出 PDF") },
+                                onClick = {
+                                    menuExpanded = false
+                                    viewModel.exportPdf(
+                                        onNeedPro = onOpenPaywall,
+                                        onSuccess = { file ->
+                                            try {
+                                                ExportShareHelper.shareFile(
+                                                    context,
+                                                    file,
+                                                    "application/pdf",
+                                                    "分享票证 PDF",
+                                                )
+                                                scope.launch {
+                                                    snackbarHostState.showSnackbar("已导出 PDF")
+                                                }
+                                            } catch (_: Exception) {
+                                                scope.launch {
+                                                    snackbarHostState.showSnackbar("分享失败")
+                                                }
+                                            }
+                                        },
+                                        onError = { msg ->
+                                            scope.launch {
+                                                snackbarHostState.showSnackbar(msg)
+                                            }
+                                        },
+                                    )
+                                },
+                            )
                             DropdownMenuItem(
                                 text = { Text("删除") },
                                 onClick = {

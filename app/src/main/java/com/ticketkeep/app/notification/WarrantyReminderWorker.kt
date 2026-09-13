@@ -18,6 +18,9 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.time.LocalDate
 
+/**
+ * 保修提醒 Worker：到期窗口内发本地通知并支持深链打开详情。
+ */
 @HiltWorker
 class WarrantyReminderWorker @AssistedInject constructor(
     @Assisted appContext: Context,

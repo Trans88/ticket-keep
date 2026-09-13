@@ -11,6 +11,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
+/**
+ * Hilt 单例模块：提供 Room 数据库与 DAO。
+ */
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {

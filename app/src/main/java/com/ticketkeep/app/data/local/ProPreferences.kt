@@ -14,6 +14,13 @@ import kotlinx.coroutines.flow.map
 
 private val Context.proDataStore: DataStore<Preferences> by preferencesDataStore(name = "pro_prefs")
 
+/**
+ * Pro 会员本地缓存（DataStore key `is_pro`）。
+ *
+ * 权威来源是 Google Play Billing 的购买/查询结果；
+ * [BillingManager] 在查询成功后写入本缓存。离线或 Play 不可用时保留上次缓存，
+ * 不要把本类的 [setPro] 当作正式开通路径（Debug 假开关除外）。
+ */
 @Singleton
 class ProPreferences @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -25,7 +32,8 @@ class ProPreferences @Inject constructor(
     }
 
     /**
-     * MVP 占位：本地开关模拟 Pro，不接真实 Billing。
+     * 由 Billing 成功查询/购买后调用以同步缓存。
+     * Debug 假开关也可调用，但正式路径必须走 Play Billing。
      */
     suspend fun setPro(enabled: Boolean) {
         context.proDataStore.edit { it[keyIsPro] = enabled }

@@ -2,6 +2,9 @@ package com.ticketkeep.app.util
 
 import java.util.Locale
 
+/**
+ * 金额（分）与人民币展示文案格式化。
+ */
 object MoneyFormats {
     fun formatYuan(amountCents: Long?): String {
         if (amountCents == null) return "—"

@@ -10,6 +10,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
+/**
+ * 开机广播：重新调度保修到期本地提醒。
+ */
 @AndroidEntryPoint
 class BootReceiver : BroadcastReceiver() {
 

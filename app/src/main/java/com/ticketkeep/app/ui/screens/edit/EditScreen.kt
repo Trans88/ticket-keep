@@ -1,6 +1,8 @@
 package com.ticketkeep.app.ui.screens.edit
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,7 +19,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -28,6 +32,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -48,6 +53,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ticketkeep.app.ui.components.PaperCard
 import com.ticketkeep.app.ui.components.TallScrollableImage
+import com.ticketkeep.app.util.DateBounds
 import com.ticketkeep.app.util.DateFormats
 import java.time.Instant
 import java.time.LocalDate
@@ -132,6 +138,15 @@ fun EditScreen(
                     maxHeight = 200.dp,
                     corner = 12.dp,
                 )
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { viewModel.rerecognize() },
+                    enabled = !state.isOcrRunning && !state.isSaving,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Text(if (state.isOcrRunning) "识别中…" else "重新识别")
+                }
                 Spacer(Modifier.height(12.dp))
             }
 
@@ -160,10 +175,21 @@ fun EditScreen(
             )
             Spacer(Modifier.height(16.dp))
 
-            TextButton(onClick = { showPurchasePicker = true }) {
-                Text("购买日：${state.purchaseDate?.let { DateFormats.display.format(it) } ?: "未设置"}")
+            DatePickField(
+                label = "购买日",
+                date = state.purchaseDate,
+                placeholder = "未设置（点此选择）",
+                onClick = { showPurchasePicker = true },
+            )
+            if (state.ocrAttempted && state.purchaseDate == null) {
+                Text(
+                    "购买日期未识别，请手动设置",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
 
+            Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = state.warrantyMonthsText,
                 onValueChange = viewModel::updateWarrantyMonths,
@@ -190,8 +216,23 @@ fun EditScreen(
                     shape = RoundedCornerShape(8.dp),
                 )
             }
-            TextButton(onClick = { showWarrantyPicker = true }) {
-                Text("保修到期：${state.warrantyEndDate?.let { DateFormats.display.format(it) } ?: "未设置"}")
+            Spacer(Modifier.height(8.dp))
+            if (state.useManualWarrantyEnd) {
+                DatePickField(
+                    label = "保修到期日",
+                    date = state.warrantyEndDate,
+                    placeholder = "未设置（点此选择）",
+                    onClick = { showWarrantyPicker = true },
+                )
+            } else {
+                DatePickField(
+                    label = "保修到期日",
+                    date = state.warrantyEndDate,
+                    placeholder = "未设置",
+                    enabled = false,
+                    supportingText = "由保修月数自动计算",
+                    onClick = {},
+                )
             }
 
             OutlinedTextField(
@@ -253,7 +294,7 @@ private fun CollapsibleOcrRawTextCard(rawText: String) {
             }
             Spacer(Modifier.height(8.dp))
             val display = if (rawText.isBlank()) {
-                "（空）ML Kit 未返回文字，请检查拍照角度与清晰度。"
+                "（空）未识别到文字。请手填字段，或点击「重新识别」。"
             } else {
                 rawText
             }
@@ -284,6 +325,47 @@ private fun CollapsibleOcrRawTextCard(rawText: String) {
     }
 }
 
+/**
+ * 可点击的日期字段：Outlined 外观 + 日历图标，整行点按打开 DatePicker。
+ */
+@Composable
+private fun DatePickField(
+    label: String,
+    date: LocalDate?,
+    placeholder: String,
+    enabled: Boolean = true,
+    supportingText: String? = null,
+    onClick: () -> Unit,
+) {
+    val text = date?.let { DateFormats.display.format(it) } ?: placeholder
+    Box(modifier = Modifier.fillMaxWidth()) {
+        OutlinedTextField(
+            value = text,
+            onValueChange = {},
+            readOnly = true,
+            enabled = enabled,
+            label = { Text(label) },
+            trailingIcon = {
+                Icon(
+                    Icons.Outlined.CalendarMonth,
+                    contentDescription = if (enabled) "打开日期选择" else null,
+                )
+            },
+            supportingText = supportingText?.let { msg -> { Text(msg) } },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp),
+        )
+        if (enabled) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clickable(onClick = onClick),
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EpochDayPickerDialog(
@@ -291,8 +373,22 @@ private fun EpochDayPickerDialog(
     onDismiss: () -> Unit,
     onConfirm: (LocalDate) -> Unit,
 ) {
-    val millis = initial.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
-    val pickerState = rememberDatePickerState(initialSelectedDateMillis = millis)
+    val min = DateBounds.MIN
+    val max = DateBounds.max()
+    val initialClamped = initial.coerceIn(min, max)
+    val millis = initialClamped.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+    val pickerState = rememberDatePickerState(
+        initialSelectedDateMillis = millis,
+        yearRange = DateBounds.yearRange(),
+        selectableDates = object : SelectableDates {
+            override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                val date = Instant.ofEpochMilli(utcTimeMillis).atZone(ZoneOffset.UTC).toLocalDate()
+                return DateBounds.isAllowed(date)
+            }
+
+            override fun isSelectableYear(year: Int): Boolean = year in DateBounds.yearRange()
+        },
+    )
     DatePickerDialog(
         onDismissRequest = onDismiss,
         confirmButton = {

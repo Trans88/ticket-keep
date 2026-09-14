@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.ticketkeep.app.billing.BillingManager
+import com.ticketkeep.app.channel.ChannelConfig
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 
@@ -19,7 +20,9 @@ class TicketKeepApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         // 启动时连接 Play Billing 并刷新一次购买状态（权威来源 → 同步 Pro 缓存）
-        billingManager.startConnectionAndRefresh()
+        if (ChannelConfig.playBillingEnabled) {
+            billingManager.startConnectionAndRefresh()
+        }
     }
 
     override fun onTerminate() {

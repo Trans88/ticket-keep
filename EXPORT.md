@@ -23,3 +23,7 @@
 - `DetailScreen` / `DetailViewModel`、`ListScreen` / `ListViewModel`
 - `TicketDao.getAll()`、`TicketRepository.getAllTickets()`
 - `res/xml/file_paths.xml`（`cache-path` exports）
+
+相关：**[IMPORT.md](IMPORT.md)**（Pro 从 CSV 导入 / 备份恢复）。
+
+相关：**[CLAIM_PACK.md](CLAIM_PACK.md)**（理赔/送修材料包 PDF）。

@@ -35,6 +35,24 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    flavorDimensions += "store"
+    productFlavors {
+        create("play") {
+            dimension = "store"
+            isDefault = true
+            buildConfigField("boolean", "PLAY_BILLING_ENABLED", "true")
+            buildConfigField("boolean", "SHOW_PRO_PURCHASE", "true")
+            buildConfigField("boolean", "SHOW_PRO_EXPORT", "true")
+        }
+        create("china") {
+            dimension = "store"
+            buildConfigField("boolean", "PLAY_BILLING_ENABLED", "false")
+            buildConfigField("boolean", "SHOW_PRO_PURCHASE", "false")
+            buildConfigField("boolean", "SHOW_PRO_EXPORT", "false")
+        }
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true

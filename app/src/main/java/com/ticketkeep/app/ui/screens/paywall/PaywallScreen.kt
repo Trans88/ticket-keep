@@ -4,16 +4,20 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -29,15 +33,21 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ticketkeep.app.billing.BillingConfig
+import com.ticketkeep.app.channel.ChannelConfig
 import com.ticketkeep.app.data.repository.TicketRepository
 import com.ticketkeep.app.ui.components.PaperCard
 
+/**
+ * Pro 升级页：展示普通与会员差异、价格，并按渠道提供购买/恢复或 Play 引导。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PaywallScreen(
@@ -79,51 +89,28 @@ fun PaywallScreen(
             Text("票证记 Pro", style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.height(8.dp))
             Text(
-                "突破 10 条上限，无限保存；单条导出 PDF，全部导出 CSV。",
+                "突破 10 条上限，无限保存；导出 PDF/CSV，生成送修材料包。",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(16.dp))
-            PaperCard(
-                modifier = Modifier.fillMaxWidth(),
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                borderColor = MaterialTheme.colorScheme.primaryContainer,
-            ) {
-                Column(Modifier.padding(16.dp)) {
-                    Text(
-                        "· 无限票证条数",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "· 导出 PDF / CSV",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "· 本地优先，无账号",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "· 保修到期提醒",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
-                    if (!priceFormatted.isNullOrBlank()) {
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            "年订阅 · $priceFormatted",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
-                    }
-                }
-            }
+            FreeVsProCompareCard(priceFormatted = priceFormatted)
             Spacer(Modifier.height(24.dp))
+
+            if (!ChannelConfig.showProPurchase) {
+                Text(
+                    "当前为国内渠道包，应用内无法通过 Google Play 开通会员。完整会员与导出请使用 Google Play 版。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "免费额度仍为 " + TicketRepository.FREE_TICKET_LIMIT + " 条，本地功能可用。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(16.dp))
+            }
 
             if (isPro) {
                 Text(
@@ -134,7 +121,7 @@ fun PaywallScreen(
                 Spacer(Modifier.height(12.dp))
             }
 
-            if (productDetails == null && !purchaseInProgress && !isPro) {
+            if (ChannelConfig.showProPurchase && productDetails == null && !purchaseInProgress && !isPro) {
                 Text(
                     "暂未从 Google Play 获取到商品，请确认应用已上架内测且已创建订阅 ${BillingConfig.PRODUCT_ID}",
                     style = MaterialTheme.typography.bodyMedium,
@@ -157,7 +144,7 @@ fun PaywallScreen(
                 Spacer(Modifier.height(12.dp))
             }
 
-            if (!isPro) {
+            if (ChannelConfig.showProPurchase && !isPro) {
                 Button(
                     onClick = { viewModel.purchase(activity) },
                     enabled = !purchaseInProgress && productDetails != null && activity != null,
@@ -177,6 +164,7 @@ fun PaywallScreen(
                 Spacer(Modifier.height(8.dp))
             }
 
+            if (ChannelConfig.showProPurchase) {
             OutlinedButton(
                 onClick = { viewModel.restore() },
                 enabled = !purchaseInProgress,
@@ -185,8 +173,9 @@ fun PaywallScreen(
                     .height(48.dp),
                 shape = RoundedCornerShape(12.dp),
             ) { Text("恢复购买") }
+            }
 
-            if (viewModel.isDebug) {
+            if (ChannelConfig.showProPurchase && viewModel.isDebug) {
                 Spacer(Modifier.height(16.dp))
                 Text(
                     "调试",
@@ -222,6 +211,187 @@ fun PaywallScreen(
                     Text("隐私政策")
                 }
             }
+        }
+    }
+}
+
+
+/**
+ * 普通用户与 Pro 会员权益对比卡：条数、OCR、提醒、本地存储、导出与 CSV 导入；贴合薄荷纸感主题。
+ */
+@Composable
+private fun FreeVsProCompareCard(priceFormatted: String?) {
+    val limit = TicketRepository.FREE_TICKET_LIMIT
+    PaperCard(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text(
+                "权益对比",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.height(12.dp))
+            CompareHeaderRow()
+            Spacer(Modifier.height(8.dp))
+            CompareFeatureRow(
+                label = "票证条数",
+                freeText = "最多 $limit 条",
+                proText = "无限",
+                freeOk = true,
+                proOk = true,
+            )
+            CompareFeatureRow(
+                label = "拍照 OCR",
+                freeText = null,
+                proText = null,
+                freeOk = true,
+                proOk = true,
+            )
+            CompareFeatureRow(
+                label = "到期提醒",
+                freeText = null,
+                proText = null,
+                freeOk = true,
+                proOk = true,
+            )
+            CompareFeatureRow(
+                label = "本地存储",
+                freeText = null,
+                proText = null,
+                freeOk = true,
+                proOk = true,
+            )
+            CompareFeatureRow(
+                label = "单条导出 PDF",
+                freeText = null,
+                proText = null,
+                freeOk = false,
+                proOk = true,
+            )
+            CompareFeatureRow(
+                label = "全部导出 CSV",
+                freeText = null,
+                proText = null,
+                freeOk = false,
+                proOk = true,
+            )
+            CompareFeatureRow(
+                label = "CSV 导入/恢复",
+                freeText = null,
+                proText = null,
+                freeOk = false,
+                proOk = true,
+            )
+            CompareFeatureRow(
+                label = "送修材料包 PDF",
+                freeText = null,
+                proText = null,
+                freeOk = false,
+                proOk = true,
+            )
+            if (!priceFormatted.isNullOrBlank()) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "年订阅 · $priceFormatted",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompareHeaderRow() {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "功能",
+            modifier = Modifier.weight(1.4f),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            "普通",
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            "会员",
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+            color = MaterialTheme.colorScheme.primary,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+private fun CompareFeatureRow(
+    label: String,
+    freeText: String?,
+    proText: String?,
+    freeOk: Boolean,
+    proOk: Boolean,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            label,
+            modifier = Modifier.weight(1.4f),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        CompareCell(
+            modifier = Modifier.weight(1f),
+            ok = freeOk,
+            text = freeText,
+            emphasize = false,
+        )
+        CompareCell(
+            modifier = Modifier.weight(1f),
+            ok = proOk,
+            text = proText,
+            emphasize = true,
+        )
+    }
+}
+
+@Composable
+private fun CompareCell(
+    modifier: Modifier,
+    ok: Boolean,
+    text: String?,
+    emphasize: Boolean,
+) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        if (text != null) {
+            Text(
+                text,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontWeight = if (emphasize) FontWeight.SemiBold else FontWeight.Normal,
+                ),
+                color = if (emphasize) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                textAlign = TextAlign.Center,
+            )
+        } else {
+            Icon(
+                imageVector = if (ok) Icons.Filled.Check else Icons.Filled.Remove,
+                contentDescription = if (ok) "支持" else "不支持",
+                tint = if (ok) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.outline
+                },
+                modifier = Modifier.width(20.dp).height(20.dp),
+            )
         }
     }
 }

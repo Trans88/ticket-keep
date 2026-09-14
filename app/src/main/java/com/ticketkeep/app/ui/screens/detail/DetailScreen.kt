@@ -38,6 +38,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ticketkeep.app.ui.components.PaperCard
 import com.ticketkeep.app.ui.components.TallScrollableImage
 import com.ticketkeep.app.ui.components.WarrantyStatusChip
+import com.ticketkeep.app.channel.ChannelConfig
 import com.ticketkeep.app.util.DateFormats
 import com.ticketkeep.app.util.MoneyFormats
 import androidx.compose.material3.SnackbarHost
@@ -47,6 +48,9 @@ import androidx.compose.ui.platform.LocalContext
 import com.ticketkeep.app.export.ExportShareHelper
 import kotlinx.coroutines.launch
 
+/**
+ * 票证详情页：查看字段与图片，Pro 可导出 PDF / 送修材料包。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DetailScreen(
@@ -85,37 +89,70 @@ fun DetailScreen(
                             expanded = menuExpanded,
                             onDismissRequest = { menuExpanded = false },
                         ) {
-                            DropdownMenuItem(
-                                text = { Text("导出 PDF") },
-                                onClick = {
-                                    menuExpanded = false
-                                    viewModel.exportPdf(
-                                        onNeedPro = onOpenPaywall,
-                                        onSuccess = { file ->
-                                            try {
-                                                ExportShareHelper.shareFile(
-                                                    context,
-                                                    file,
-                                                    "application/pdf",
-                                                    "分享票证 PDF",
-                                                )
-                                                scope.launch {
-                                                    snackbarHostState.showSnackbar("已导出 PDF")
+                            if (ChannelConfig.showProExport) {
+                                DropdownMenuItem(
+                                    text = { Text("导出 PDF") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        viewModel.exportPdf(
+                                            onNeedPro = onOpenPaywall,
+                                            onSuccess = { file ->
+                                                try {
+                                                    ExportShareHelper.shareFile(
+                                                        context,
+                                                        file,
+                                                        "application/pdf",
+                                                        "导出票证 PDF",
+                                                    )
+                                                    scope.launch {
+                                                        snackbarHostState.showSnackbar("已导出 PDF")
+                                                    }
+                                                } catch (_: Exception) {
+                                                    scope.launch {
+                                                        snackbarHostState.showSnackbar("分享失败")
+                                                    }
                                                 }
-                                            } catch (_: Exception) {
+                                            },
+                                            onError = { msg ->
                                                 scope.launch {
-                                                    snackbarHostState.showSnackbar("分享失败")
+                                                    snackbarHostState.showSnackbar(msg)
                                                 }
-                                            }
-                                        },
-                                        onError = { msg ->
-                                            scope.launch {
-                                                snackbarHostState.showSnackbar(msg)
-                                            }
-                                        },
-                                    )
-                                },
-                            )
+                                            },
+                                        )
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("生成送修材料包") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        viewModel.exportClaimPack(
+                                            onNeedPro = onOpenPaywall,
+                                            onSuccess = { file ->
+                                                try {
+                                                    ExportShareHelper.shareFile(
+                                                        context,
+                                                        file,
+                                                        "application/pdf",
+                                                        "送修材料包",
+                                                    )
+                                                    scope.launch {
+                                                        snackbarHostState.showSnackbar("已生成送修材料包")
+                                                    }
+                                                } catch (_: Exception) {
+                                                    scope.launch {
+                                                        snackbarHostState.showSnackbar("分享失败")
+                                                    }
+                                                }
+                                            },
+                                            onError = { msg ->
+                                                scope.launch {
+                                                    snackbarHostState.showSnackbar(msg)
+                                                }
+                                            },
+                                        )
+                                    },
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text("删除") },
                                 onClick = {

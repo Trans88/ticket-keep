@@ -8,11 +8,19 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import com.ticketkeep.app.ui.screens.splash.BrandLaunchFrame
+import kotlinx.coroutines.delay
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -23,6 +31,7 @@ import com.ticketkeep.app.ui.navigation.Routes
 import com.ticketkeep.app.ui.screens.detail.DetailScreen
 import com.ticketkeep.app.ui.screens.edit.EditScreen
 import com.ticketkeep.app.ui.screens.list.ListScreen
+import com.ticketkeep.app.ui.screens.settings.SettingsScreen
 import com.ticketkeep.app.ui.screens.paywall.PaywallScreen
 import com.ticketkeep.app.ui.screens.privacy.PrivacyPolicyScreen
 import com.ticketkeep.app.ui.theme.TicketKeepTheme
@@ -47,7 +56,13 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             TicketKeepTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
+                var showBrandFrame by remember { mutableStateOf(true) }
+                LaunchedEffect(Unit) {
+                    delay(350L) // ≤400ms 品牌帧，不拖秒
+                    showBrandFrame = false
+                }
+                Box(modifier = Modifier.fillMaxSize()) {
+                    Surface(modifier = Modifier.fillMaxSize()) {
                     val navController = rememberNavController()
                     NavHost(
                         navController = navController,
@@ -62,6 +77,7 @@ class MainActivity : ComponentActivity() {
                                 onOpenPaywall = { navController.navigate(Routes.PAYWALL) },
                                 onCreateBlank = { navController.navigate(Routes.edit()) },
                                 onOpenPrivacy = { navController.navigate(Routes.PRIVACY) },
+                                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                             )
                         }
                         composable(
@@ -106,15 +122,23 @@ class MainActivity : ComponentActivity() {
                                 onOpenPrivacy = { navController.navigate(Routes.PRIVACY) },
                             )
                         }
+                        composable(Routes.SETTINGS) {
+                            SettingsScreen(onBack = { navController.popBackStack() })
+                        }
+
                         composable(Routes.PRIVACY) {
                             PrivacyPolicyScreen(onBack = { navController.popBackStack() })
                         }
                     }
 
                     if (openTicketId > 0) {
-                        androidx.compose.runtime.LaunchedEffect(openTicketId) {
+                        LaunchedEffect(openTicketId) {
                             navController.navigate(Routes.detail(openTicketId))
                         }
+                    }
+                    }
+                    if (showBrandFrame) {
+                        BrandLaunchFrame()
                     }
                 }
             }

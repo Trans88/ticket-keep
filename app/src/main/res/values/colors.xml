@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 兼容旧引用；自适应图标背景已改用 drawable -->
-    <color name="ic_launcher_background">#CCFBF1</color>
+    <color name="ic_launcher_background">#0F766E</color>
     <color name="splash_bg">#F4F7F6</color>
     <color name="mint_primary">#0F766E</color>
     <color name="mint_container">#CCFBF1</color>

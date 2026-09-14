@@ -11,7 +11,7 @@ data class OcrParseResult(
     val purchaseDateEpochDay: Long? = null,
     /** 保修月数，如「3年」→ 36、「36个月」→ 36 */
     val warrantyMonths: Int? = null,
-    /** 保修截止日期（优先来自「保修截止日期」标签） */
+    /** 保修截止日期（优先来自「保修截止日期 / 保修至」等标签） */
     val warrantyEndEpochDay: Long? = null,
     /** 故障描述 / 备注等长文本 */
     val note: String? = null,

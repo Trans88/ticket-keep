@@ -8,6 +8,7 @@ object Routes {
     const val DETAIL = "detail/{ticketId}"
     const val EDIT = "edit?ticketId={ticketId}&imageUri={imageUri}"
     const val PAYWALL = "paywall"
+    const val SETTINGS = "settings"
     const val PRIVACY = "privacy"
 
     fun detail(ticketId: Long) = "detail/$ticketId"

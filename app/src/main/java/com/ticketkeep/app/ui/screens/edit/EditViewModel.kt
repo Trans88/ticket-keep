@@ -8,6 +8,7 @@ import com.ticketkeep.app.data.model.Ticket
 import com.ticketkeep.app.data.repository.TicketRepository
 import com.ticketkeep.app.ocr.MlKitOcrHelper
 import com.ticketkeep.app.ocr.OcrParseResult
+import com.ticketkeep.app.util.DateBounds
 import com.ticketkeep.app.util.DateFormats
 import com.ticketkeep.app.util.ImageStorage
 import com.ticketkeep.app.util.MoneyFormats
@@ -21,7 +22,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * 编辑页 UI 状态：表单字段、OCR 进度与错误提示。
+ * 编辑页 UI 状态：表单字段、图片路径、OCR 进行中与提示。
+ * 购买日可为 null（OCR 未识别时不静默填「今天」）。
  */
 data class EditUiState(
     val ticketId: Long = 0L,
@@ -34,13 +36,17 @@ data class EditUiState(
     val imagePath: String? = null,
     val ocrRawText: String = "",
     val isOcrRunning: Boolean = false,
-    /** 本次新建是否已经跑过 OCR（用于展示「识别原文」区块） */
+    /** 本次是否已经跑过 OCR（用于展示「识别原文」与「重新识别」） */
     val ocrAttempted: Boolean = false,
     val isSaving: Boolean = false,
     val errorMessage: String? = null,
     val useManualWarrantyEnd: Boolean = false,
 )
 
+/**
+ * 编辑/新建页 ViewModel：OCR 填表、重新识别、手改、保存到 Repository。
+ * 受免费条数上限约束；超限应引导 Pro。
+ */
 @HiltViewModel
 class EditViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
@@ -83,7 +89,7 @@ class EditViewModel @Inject constructor(
                 note = ticket.note,
                 imagePath = ticket.imagePath,
                 ocrRawText = ticket.ocrRawText,
-                ocrAttempted = ticket.ocrRawText.isNotBlank(),
+                ocrAttempted = ticket.ocrRawText.isNotBlank() || !ticket.imagePath.isNullOrBlank(),
                 useManualWarrantyEnd = ticket.warrantyMonths == null && ticket.warrantyEndEpochDay != null,
             )
         }
@@ -91,7 +97,7 @@ class EditViewModel @Inject constructor(
 
     /**
      * 新建带图：先把 URI 落盘（消费一次性 content 流），再对本地文件做 OCR。
-     * 切勿 persist 后再 recognize(原 uri)——Photo Picker 流常只能读一次，会导致 ML Kit 得到空图/空字。
+     * 切勿 persist 后再 recognize(原 uri)——Photo Picker 流常只能读一次。
      */
     private suspend fun ingestNewImage(uri: Uri) {
         _uiState.update {
@@ -103,9 +109,6 @@ class EditViewModel @Inject constructor(
                 it.copy(
                     isOcrRunning = false,
                     ocrAttempted = true,
-                    purchaseDate = LocalDate.now(),
-                    warrantyMonthsText = "12",
-                    warrantyEndDate = LocalDate.now().plusMonths(12),
                     errorMessage = "无法读取图片。请换一张图，或用「拍照」重试。",
                 )
             }
@@ -119,50 +122,90 @@ class EditViewModel @Inject constructor(
                     isOcrRunning = false,
                     ocrAttempted = true,
                     imagePath = path,
-                    purchaseDate = LocalDate.now(),
-                    warrantyMonthsText = "12",
-                    warrantyEndDate = LocalDate.now().plusMonths(12),
-                    errorMessage = "OCR 失败：${e.message ?: "未知错误"}。请对照照片手填，或换更清晰的图重试。",
+                    errorMessage = "OCR 失败：${e.message ?: "未知错误"}。请对照照片手填。",
                 )
             }
             return
         }
-        applyOcrResult(path, parse)
+        applyOcrResult(path, parse, preserveHandFields = false)
     }
 
-    private fun applyOcrResult(path: String?, parse: OcrParseResult) {
+    /**
+     * 对当前已落盘 [EditUiState.imagePath] 重新跑 ML Kit + 解析。
+     * 不使用 content URI；OCR 进行中禁用按钮；表单字段仍可手改。
+     */
+    fun rerecognize() {
+        val path = _uiState.value.imagePath
+        if (path.isNullOrBlank() || _uiState.value.isOcrRunning) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isOcrRunning = true, errorMessage = null) }
+            val parse = try {
+                ocrHelper.recognizeFile(path)
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isOcrRunning = false,
+                        ocrAttempted = true,
+                        errorMessage = "重新识别失败：${e.message ?: "未知错误"}。请手填。",
+                    )
+                }
+                return@launch
+            }
+            applyOcrResult(path, parse, preserveHandFields = false)
+        }
+    }
+
+    /**
+     * 将 OCR 结果写入表单。购买日未识别时不静默填「今天」，并给出明确提示。
+     * 原文为空或关键字段全空时，仅提示手填或重新识别，不展示拍摄技巧类文案。
+     */
+    private fun applyOcrResult(
+        path: String?,
+        parse: OcrParseResult,
+        preserveHandFields: Boolean,
+    ) {
         val rawBlank = parse.rawText.isBlank()
         val purchase = parse.purchaseDateEpochDay?.let(DateFormats::epochDayToLocalDate)
         val endFromOcr = parse.warrantyEndEpochDay?.let(DateFormats::epochDayToLocalDate)
         val months = parse.warrantyMonths
             ?: if (parse.isWarrantyForm) null else 12
 
+        val keyFieldsEmpty = parse.merchantName.isNullOrBlank() &&
+            parse.amountCents == null &&
+            purchase == null &&
+            months == null &&
+            endFromOcr == null &&
+            parse.note.isNullOrBlank()
+
         val useManualEnd = endFromOcr != null
-        val purchaseOrToday = purchase ?: LocalDate.now()
         val endDate = when {
             endFromOcr != null -> endFromOcr
-            months != null -> purchaseOrToday.plusMonths(months.toLong())
+            months != null && purchase != null -> purchase.plusMonths(months.toLong())
             else -> null
         }
 
         val hint = when {
-            rawBlank ->
-                "未能识别出文字（图片已保存）。请确认重装了最新包；仍失败可换拍照或手填。"
-            parse.merchantName == null && purchase == null && months == null && endFromOcr == null ->
-                "已得到识别原文，但未能自动解析字段。请对照下方原文手改。"
-            parse.isWarrantyForm && purchase == null ->
-                "已按保修单解析部分字段；购买日期未识别到，已暂用今天，请核对原文。"
+            rawBlank || keyFieldsEmpty ->
+                // 空结果时只提示手填/重试，避免拍摄技巧类文案
+                if (rawBlank) {
+                    "未能识别出文字。请手填下方字段，或点击「重新识别」。"
+                } else {
+                    "已得到识别原文，但未能自动解析字段。请对照原文手改。"
+                }
+            purchase == null ->
+                "购买日期未识别到，请手动设置（不会自动填今天）。"
             else -> null
         }
 
-        _uiState.update {
-            it.copy(
+        _uiState.update { state ->
+            val base = if (preserveHandFields) state else state
+            base.copy(
                 isOcrRunning = false,
                 ocrAttempted = true,
-                imagePath = path,
+                imagePath = path ?: state.imagePath,
                 merchantName = parse.merchantName.orEmpty(),
                 amountText = MoneyFormats.centsToYuanString(parse.amountCents),
-                purchaseDate = purchaseOrToday,
+                purchaseDate = purchase, // 可为 null：不静默 today
                 warrantyMonthsText = months?.toString().orEmpty(),
                 warrantyEndDate = endDate,
                 useManualWarrantyEnd = useManualEnd,
@@ -178,6 +221,10 @@ class EditViewModel @Inject constructor(
     fun updateNote(value: String) = _uiState.update { it.copy(note = value) }
 
     fun updatePurchaseDate(date: LocalDate) {
+        if (!DateBounds.isAllowed(date)) {
+            _uiState.update { it.copy(errorMessage = DateBounds.OUT_OF_RANGE_MESSAGE) }
+            return
+        }
         _uiState.update { state ->
             val end = if (!state.useManualWarrantyEnd) {
                 val m = state.warrantyMonthsText.toIntOrNull() ?: 0
@@ -185,7 +232,7 @@ class EditViewModel @Inject constructor(
             } else {
                 state.warrantyEndDate
             }
-            state.copy(purchaseDate = date, warrantyEndDate = end)
+            state.copy(purchaseDate = date, warrantyEndDate = end, errorMessage = null)
         }
     }
 
@@ -203,7 +250,13 @@ class EditViewModel @Inject constructor(
     }
 
     fun updateWarrantyEnd(date: LocalDate) {
-        _uiState.update { it.copy(warrantyEndDate = date, useManualWarrantyEnd = true) }
+        if (!DateBounds.isAllowed(date)) {
+            _uiState.update { it.copy(errorMessage = DateBounds.OUT_OF_RANGE_MESSAGE) }
+            return
+        }
+        _uiState.update {
+            it.copy(warrantyEndDate = date, useManualWarrantyEnd = true, errorMessage = null)
+        }
     }
 
     fun toggleManualWarrantyEnd(manual: Boolean) {

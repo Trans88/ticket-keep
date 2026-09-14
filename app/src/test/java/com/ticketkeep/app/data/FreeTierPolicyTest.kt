@@ -36,4 +36,16 @@ class FreeTierPolicyTest {
         assertTrue(TicketRepository.canAdd(isPro = true, count = 100))
         assertTrue(TicketRepository.canAdd(isPro = true, count = 10))
     }
+
+    @Test
+    fun pro_hundredExist_canStillAdd() {
+        assertTrue(TicketRepository.canAdd(isPro = true, count = 100))
+    }
+
+    @Test
+    fun nonPro_atLimit_blocksLikeExportImportGate() {
+        // 与导入/导出共用：非 Pro 不可突破免费上限；Pro 能力另由 isPro 门禁
+        assertFalse(TicketRepository.canAdd(isPro = false, count = TicketRepository.FREE_TICKET_LIMIT))
+        assertTrue(TicketRepository.canAdd(isPro = true, count = TicketRepository.FREE_TICKET_LIMIT))
+    }
 }

@@ -3,6 +3,8 @@ package com.ticketkeep.app.ui.screens.paywall
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -33,6 +35,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.Modifier
@@ -44,6 +47,7 @@ import com.ticketkeep.app.billing.BillingConfig
 import com.ticketkeep.app.channel.ChannelConfig
 import com.ticketkeep.app.data.repository.TicketRepository
 import com.ticketkeep.app.ui.components.PaperCard
+import com.ticketkeep.app.ui.theme.MintPrimaryContainer
 
 /**
  * Pro 升级页：展示普通与会员差异、价格，并按渠道提供购买/恢复或 Play 引导。
@@ -89,7 +93,7 @@ fun PaywallScreen(
             Text("票证记 Pro", style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.height(8.dp))
             Text(
-                "突破 10 条上限，无限保存；导出 PDF/CSV，生成送修材料包。",
+                "突破 10 条上限，导出与索赔包一次备齐",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -114,7 +118,7 @@ fun PaywallScreen(
 
             if (isPro) {
                 Text(
-                    "已是 Pro会员",
+                    "你已是 Pro 会员",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -217,7 +221,8 @@ fun PaywallScreen(
 
 
 /**
- * 普通用户与 Pro 会员权益对比卡：条数、OCR、提醒、本地存储、导出与 CSV 导入；贴合薄荷纸感主题。
+ * 普通 vs Pro 权益对比卡（设计桥规范）：纸感白卡、Pro 列 `#CCFBF1` 通栏圆角、分组疏排。
+ * ✓：普通列 onSurfaceVariant；Pro 列 primary。—：outline，不用 error 红。
  */
 @Composable
 private fun FreeVsProCompareCard(priceFormatted: String?) {
@@ -230,64 +235,68 @@ private fun FreeVsProCompareCard(priceFormatted: String?) {
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(Modifier.height(12.dp))
-            CompareHeaderRow()
-            Spacer(Modifier.height(8.dp))
-            CompareFeatureRow(
-                label = "票证条数",
-                freeText = "最多 $limit 条",
-                proText = "无限",
-                freeOk = true,
-                proOk = true,
-            )
-            CompareFeatureRow(
-                label = "拍照 OCR",
-                freeText = null,
-                proText = null,
-                freeOk = true,
-                proOk = true,
-            )
-            CompareFeatureRow(
-                label = "到期提醒",
-                freeText = null,
-                proText = null,
-                freeOk = true,
-                proOk = true,
-            )
-            CompareFeatureRow(
-                label = "本地存储",
-                freeText = null,
-                proText = null,
-                freeOk = true,
-                proOk = true,
-            )
-            CompareFeatureRow(
-                label = "单条导出 PDF",
-                freeText = null,
-                proText = null,
-                freeOk = false,
-                proOk = true,
-            )
-            CompareFeatureRow(
-                label = "全部导出 CSV",
-                freeText = null,
-                proText = null,
-                freeOk = false,
-                proOk = true,
-            )
-            CompareFeatureRow(
-                label = "CSV 导入/恢复",
-                freeText = null,
-                proText = null,
-                freeOk = false,
-                proOk = true,
-            )
-            CompareFeatureRow(
-                label = "送修材料包 PDF",
-                freeText = null,
-                proText = null,
-                freeOk = false,
-                proOk = true,
-            )
+
+            Row(modifier = Modifier.fillMaxWidth()) {
+                // 功能列
+                Column(modifier = Modifier.weight(1.6f)) {
+                    CompareSideHeader("功能", emphasize = false)
+                    Spacer(Modifier.height(16.dp))
+                    CompareGroupTitle("基础能力")
+                    CompareLabelCell("拍照 OCR")
+                    CompareLabelCell("保修提醒")
+                    CompareLabelCell("本地存储")
+                    Spacer(Modifier.height(16.dp))
+                    CompareGroupTitle("Pro 解锁")
+                    CompareLabelCell("票证数量")
+                    CompareLabelCell("单张导出 PDF")
+                    CompareLabelCell("全量导出 CSV")
+                    CompareLabelCell("CSV 导入/恢复")
+                    CompareLabelCell("保修索赔包 PDF")
+                }
+                // 普通列
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    CompareSideHeader("普通", emphasize = false)
+                    Spacer(Modifier.height(16.dp))
+                    CompareGroupTitle(" ") // 占位对齐
+                    CompareIconCell(ok = true, emphasize = false)
+                    CompareIconCell(ok = true, emphasize = false)
+                    CompareIconCell(ok = true, emphasize = false)
+                    Spacer(Modifier.height(16.dp))
+                    CompareGroupTitle(" ")
+                    CompareTextCell("最多 $limit 条", emphasize = false)
+                    CompareIconCell(ok = false, emphasize = false)
+                    CompareIconCell(ok = false, emphasize = false)
+                    CompareIconCell(ok = false, emphasize = false)
+                    CompareIconCell(ok = false, emphasize = false)
+                }
+                // Pro 列通栏薄荷底
+                Column(
+                    modifier = Modifier
+                        .weight(1.1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MintPrimaryContainer)
+                        .padding(vertical = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    CompareSideHeader("Pro", emphasize = true)
+                    Spacer(Modifier.height(16.dp))
+                    CompareGroupTitle(" ")
+                    CompareIconCell(ok = true, emphasize = true)
+                    CompareIconCell(ok = true, emphasize = true)
+                    CompareIconCell(ok = true, emphasize = true)
+                    Spacer(Modifier.height(16.dp))
+                    CompareGroupTitle(" ")
+                    CompareTextCell("无限", emphasize = true)
+                    CompareIconCell(ok = true, emphasize = true)
+                    CompareIconCell(ok = true, emphasize = true)
+                    CompareIconCell(ok = true, emphasize = true)
+                    CompareIconCell(ok = true, emphasize = true)
+                }
+            }
+
             if (!priceFormatted.isNullOrBlank()) {
                 Spacer(Modifier.height(12.dp))
                 Text(
@@ -300,99 +309,106 @@ private fun FreeVsProCompareCard(priceFormatted: String?) {
     }
 }
 
-@Composable
-private fun CompareHeaderRow() {
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            "功能",
-            modifier = Modifier.weight(1.4f),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            "普通",
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-        Text(
-            "会员",
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-            color = MaterialTheme.colorScheme.primary,
-            textAlign = TextAlign.Center,
-        )
-    }
-}
+private val CompareRowHeight = 40.dp
 
 @Composable
-private fun CompareFeatureRow(
-    label: String,
-    freeText: String?,
-    proText: String?,
-    freeOk: Boolean,
-    proOk: Boolean,
-) {
-    Row(
+private fun CompareSideHeader(text: String, emphasize: Boolean) {
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .height(CompareRowHeight),
+        contentAlignment = Alignment.Center,
     ) {
         Text(
-            label,
-            modifier = Modifier.weight(1.4f),
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        CompareCell(
-            modifier = Modifier.weight(1f),
-            ok = freeOk,
-            text = freeText,
-            emphasize = false,
-        )
-        CompareCell(
-            modifier = Modifier.weight(1f),
-            ok = proOk,
-            text = proText,
-            emphasize = true,
+            text = text,
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontWeight = if (emphasize) FontWeight.SemiBold else FontWeight.Normal,
+            ),
+            color = if (emphasize) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            textAlign = TextAlign.Center,
         )
     }
 }
 
 @Composable
-private fun CompareCell(
-    modifier: Modifier,
-    ok: Boolean,
-    text: String?,
-    emphasize: Boolean,
-) {
-    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        if (text != null) {
+private fun CompareGroupTitle(text: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(CompareRowHeight),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        if (text.isNotBlank()) {
             Text(
                 text,
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontWeight = if (emphasize) FontWeight.SemiBold else FontWeight.Normal,
-                ),
-                color = if (emphasize) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                textAlign = TextAlign.Center,
-            )
-        } else {
-            Icon(
-                imageVector = if (ok) Icons.Filled.Check else Icons.Filled.Remove,
-                contentDescription = if (ok) "支持" else "不支持",
-                tint = if (ok) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.outline
-                },
-                modifier = Modifier.width(20.dp).height(20.dp),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+@Composable
+private fun CompareLabelCell(text: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(CompareRowHeight),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+@Composable
+private fun CompareIconCell(ok: Boolean, emphasize: Boolean) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(CompareRowHeight),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = if (ok) Icons.Filled.Check else Icons.Filled.Remove,
+            contentDescription = if (ok) "支持" else "不支持",
+            tint = when {
+                !ok -> MaterialTheme.colorScheme.outline
+                emphasize -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            modifier = Modifier.width(20.dp).height(20.dp),
+        )
+    }
+}
+
+@Composable
+private fun CompareTextCell(text: String, emphasize: Boolean) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(CompareRowHeight),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.bodySmall.copy(
+                fontWeight = if (emphasize) FontWeight.SemiBold else FontWeight.Normal,
+            ),
+            color = if (emphasize) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            textAlign = TextAlign.Center,
+        )
     }
 }
 

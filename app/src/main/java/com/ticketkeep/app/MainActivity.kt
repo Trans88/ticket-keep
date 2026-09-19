@@ -37,6 +37,16 @@ import com.ticketkeep.app.ui.screens.paywall.PaywallScreen
 import com.ticketkeep.app.ui.screens.privacy.PrivacyPolicyScreen
 import com.ticketkeep.app.ui.theme.TicketKeepTheme
 import dagger.hilt.android.AndroidEntryPoint
+import android.app.Activity
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.ui.platform.LocalContext
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.compose.currentBackStackEntryAsState
+import com.ticketkeep.app.ui.navigation.HomeBottomBar
+import com.ticketkeep.app.ui.navigation.shouldShowHomeBottomBar
 
 /**
  * 应用唯一 Activity：Compose 导航、Splash、通知深链与权限请求入口。
@@ -65,83 +75,120 @@ class MainActivity : ComponentActivity() {
                 Box(modifier = Modifier.fillMaxSize()) {
                     Surface(modifier = Modifier.fillMaxSize()) {
                     val navController = rememberNavController()
-                    NavHost(
-                        navController = navController,
-                        startDestination = Routes.LIST,
-                    ) {
-                        composable(Routes.LIST) {
-                            ListScreen(
-                                onOpenDetail = { id -> navController.navigate(Routes.detail(id)) },
-                                onCreateWithImage = { uri ->
-                                    navController.navigate(Routes.edit(imageUri = uri.toString()))
-                                },
-                                onOpenPaywall = { navController.navigate(Routes.PAYWALL) },
-                                onCreateBlank = { navController.navigate(Routes.edit()) },
-                                onOpenPrivacy = { navController.navigate(Routes.PRIVACY) },
-                                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
-                            )
-                        }
-                        composable(
-                            route = Routes.DETAIL,
-                            arguments = listOf(navArgument("ticketId") { type = NavType.LongType }),
-                        ) {
-                            DetailScreen(
-                                onBack = { navController.popBackStack() },
-                                onEdit = { id -> navController.navigate(Routes.edit(ticketId = id)) },
-                                onOpenPaywall = { navController.navigate(Routes.PAYWALL) },
-                            )
-                        }
-                        composable(
-                            route = Routes.EDIT,
-                            arguments = listOf(
-                                navArgument("ticketId") {
-                                    type = NavType.LongType
-                                    defaultValue = -1L
-                                },
-                                navArgument("imageUri") {
-                                    type = NavType.StringType
-                                    defaultValue = ""
-                                },
-                            ),
-                        ) {
-                            EditScreen(
-                                onBack = { navController.popBackStack() },
-                                onSaved = { id ->
-                                    navController.popBackStack()
-                                    navController.navigate(Routes.detail(id)) {
-                                        launchSingleTop = true
-                                    }
-                                },
-                                onNeedPro = {
-                                    navController.navigate(Routes.PAYWALL)
-                                },
-                            )
-                        }
-                        composable(Routes.PAYWALL) {
-                            PaywallScreen(
-                                onBack = { navController.popBackStack() },
-                                onOpenPrivacy = { navController.navigate(Routes.PRIVACY) },
-                            )
-                        }
-                        composable(Routes.SETTINGS) {
-                            SettingsScreen(
-                                onBack = { navController.popBackStack() },
-                                onOpenCloudBackup = { navController.navigate(Routes.CLOUD_BACKUP) },
-                                onOpenPaywall = { navController.navigate(Routes.PAYWALL) },
-                            )
-                        }
-                        composable(Routes.CLOUD_BACKUP) {
-                            CloudBackupScreen(
-                                onBack = { navController.popBackStack() },
-                                onNeedPro = {
-                                    navController.popBackStack()
-                                    navController.navigate(Routes.PAYWALL)
-                                },
-                            )
-                        }
+                    val navBackStackEntry by navController.currentBackStackEntryAsState()
+                    val currentRoute = navBackStackEntry?.destination?.route
+                    val showBottomBar = shouldShowHomeBottomBar(currentRoute)
+                    val activity = LocalContext.current as? Activity
 
-                        composable(Routes.PRIVACY) {
-                            PrivacyPolicyScreen(onBack = { navController.popBackStack() })
+                    fun navigateTab(route: String) {
+                        navController.navigate(route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+
+                    BackHandler(enabled = showBottomBar) {
+                        when (currentRoute) {
+                            Routes.SETTINGS -> navigateTab(Routes.LIST)
+                            Routes.LIST -> activity?.finish()
+                            else -> Unit
+                        }
+                    }
+
+                    Scaffold(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        bottomBar = {
+                            if (showBottomBar) {
+                                HomeBottomBar(
+                                    currentRoute = currentRoute,
+                                    onSelectList = { navigateTab(Routes.LIST) },
+                                    onSelectSettings = { navigateTab(Routes.SETTINGS) },
+                                )
+                            }
+                        },
+                    ) { innerPadding ->
+                        NavHost(
+                            navController = navController,
+                            startDestination = Routes.LIST,
+                            modifier = Modifier.padding(innerPadding),
+                        ) {
+                            composable(Routes.LIST) {
+                                ListScreen(
+                                    onOpenDetail = { id -> navController.navigate(Routes.detail(id)) },
+                                    onCreateWithImage = { uri ->
+                                        navController.navigate(Routes.edit(imageUri = uri.toString()))
+                                    },
+                                    onOpenPaywall = { navController.navigate(Routes.PAYWALL) },
+                                    onCreateBlank = { navController.navigate(Routes.edit()) },
+                                    onOpenPrivacy = { navController.navigate(Routes.PRIVACY) },
+                                    onOpenSettings = { navigateTab(Routes.SETTINGS) },
+                                )
+                            }
+                            composable(
+                                route = Routes.DETAIL,
+                                arguments = listOf(navArgument("ticketId") { type = NavType.LongType }),
+                            ) {
+                                DetailScreen(
+                                    onBack = { navController.popBackStack() },
+                                    onEdit = { id -> navController.navigate(Routes.edit(ticketId = id)) },
+                                    onOpenPaywall = { navController.navigate(Routes.PAYWALL) },
+                                )
+                            }
+                            composable(
+                                route = Routes.EDIT,
+                                arguments = listOf(
+                                    navArgument("ticketId") {
+                                        type = NavType.LongType
+                                        defaultValue = -1L
+                                    },
+                                    navArgument("imageUri") {
+                                        type = NavType.StringType
+                                        defaultValue = ""
+                                    },
+                                ),
+                            ) {
+                                EditScreen(
+                                    onBack = { navController.popBackStack() },
+                                    onSaved = { id ->
+                                        navController.popBackStack()
+                                        navController.navigate(Routes.detail(id)) {
+                                            launchSingleTop = true
+                                        }
+                                    },
+                                    onNeedPro = {
+                                        navController.navigate(Routes.PAYWALL)
+                                    },
+                                )
+                            }
+                            composable(Routes.PAYWALL) {
+                                PaywallScreen(
+                                    onBack = { navController.popBackStack() },
+                                    onOpenPrivacy = { navController.navigate(Routes.PRIVACY) },
+                                )
+                            }
+                            composable(Routes.SETTINGS) {
+                                SettingsScreen(
+                                    onBack = { navigateTab(Routes.LIST) },
+                                    onOpenCloudBackup = { navController.navigate(Routes.CLOUD_BACKUP) },
+                                    onOpenPaywall = { navController.navigate(Routes.PAYWALL) },
+                                    showUpNavigation = false,
+                                )
+                            }
+                            composable(Routes.CLOUD_BACKUP) {
+                                CloudBackupScreen(
+                                    onBack = { navController.popBackStack() },
+                                    onNeedPro = {
+                                        navController.popBackStack()
+                                        navController.navigate(Routes.PAYWALL)
+                                    },
+                                )
+                            }
+                            composable(Routes.PRIVACY) {
+                                PrivacyPolicyScreen(onBack = { navController.popBackStack() })
+                            }
                         }
                     }
 

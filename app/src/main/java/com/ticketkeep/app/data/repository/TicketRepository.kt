@@ -5,6 +5,7 @@ import com.ticketkeep.app.data.local.ProPreferences
 import com.ticketkeep.app.data.local.TicketDao
 import com.ticketkeep.app.data.model.Ticket
 import com.ticketkeep.app.notification.WarrantyReminderScheduler
+import com.ticketkeep.app.widget.WidgetRefresher
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
@@ -18,6 +19,7 @@ class TicketRepository @Inject constructor(
     private val ticketDao: TicketDao,
     private val proPreferences: ProPreferences,
     private val reminderScheduler: WarrantyReminderScheduler,
+    private val widgetRefresher: WidgetRefresher,
 ) {
     companion object {
         const val FREE_TICKET_LIMIT = 10
@@ -56,12 +58,14 @@ class TicketRepository @Inject constructor(
         }
         val saved = ticketDao.getById(id) ?: ticket.copy(id = id)
         reminderScheduler.scheduleForTicket(saved)
+        widgetRefresher.refreshExpiringWidget()
         return id
     }
 
     suspend fun deleteTicket(id: Long) {
         reminderScheduler.cancelForTicket(id)
         ticketDao.deleteById(id)
+        widgetRefresher.refreshExpiringWidget()
     }
 
     /**

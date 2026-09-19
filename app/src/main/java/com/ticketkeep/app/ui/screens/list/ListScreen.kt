@@ -1,5 +1,8 @@
 package com.ticketkeep.app.ui.screens.list
 
+import androidx.compose.runtime.LaunchedEffect
+import com.ticketkeep.app.widget.WidgetIntents
+
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
@@ -102,6 +105,7 @@ import com.ticketkeep.app.export.TicketCsvImporter
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ListScreen(
+    initialExpiryFilter: String? = null,
     onOpenDetail: (Long) -> Unit,
     onCreateWithImage: (Uri) -> Unit,
     onCreateBlank: () -> Unit,
@@ -111,6 +115,12 @@ fun ListScreen(
     viewModel: ListViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(initialExpiryFilter) {
+        when (initialExpiryFilter) {
+            WidgetIntents.FILTER_NOT_EXPIRED -> viewModel.setExpiryBucket(ExpiryBucket.NOT_EXPIRED)
+        }
+    }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var showAddSheet by remember { mutableStateOf(false) }

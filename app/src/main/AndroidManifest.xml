@@ -31,7 +31,8 @@
             android:name=".MainActivity"
             android:exported="true"
             android:theme="@style/Theme.TicketKeep.Splash"
-            android:windowSoftInputMode="adjustResize">
+            android:windowSoftInputMode="adjustResize"
+            android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -68,6 +69,19 @@
                 android:value="androidx.startup"
                 tools:node="remove" />
         </provider>
+
+    
+        <receiver
+            android:name=".widget.ExpiringTicketsWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_expiring_loading">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/expiring_tickets_widget_info" />
+        </receiver>
 
     </application>
 </manifest>

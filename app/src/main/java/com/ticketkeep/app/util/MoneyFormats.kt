@@ -6,8 +6,9 @@ import java.util.Locale
  * 金额（分）与人民币展示文案格式化。
  */
 object MoneyFormats {
+    /** 列表/详情展示；null 显示「—」，不显示 ¥0.00。 */
     fun formatYuan(amountCents: Long?): String {
-        if (amountCents == null) return "—"
+        if (amountCents == null || amountCents == 0L) return "—"
         val yuan = amountCents / 100.0
         return String.format(Locale.CHINA, "¥%.2f", yuan)
     }

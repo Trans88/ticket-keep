@@ -14,7 +14,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
- * 云备份页状态：登录、口令、上传、列表、恢复预览与错误提示。
+ * 云备份页状态（配合 Screen 状态机分段）：
+ * - isLoggedIn=false：UI 仅账号；不暴露列表/恢复主路径。
+ * - isLoggedIn=true：备份状态 + 上传 + 列表；恢复由 Screen 二次确认后再调 [prepareRestore]。
+ * Base URL 变更仍走 [setBaseUrl]；是否展示由 Screen 的 BuildConfig.DEBUG +「高级」折叠控制。
  */
 data class CloudBackupUiState(
     val isPro: Boolean? = null,
@@ -48,7 +51,9 @@ class CloudBackupViewModel @Inject constructor(
                     isLoggedIn = s.isLoggedIn,
                     baseUrl = s.baseUrl,
                 )
+                // 仅登录后拉列表；未登录不预取，避免误展示恢复入口所需数据
                 if (s.isLoggedIn) refreshListQuiet()
+                else _ui.value = _ui.value.copy(backups = emptyList())
             }
         }
         viewModelScope.launch {
@@ -124,6 +129,7 @@ class CloudBackupViewModel @Inject constructor(
         }
     }
 
+    /** 须在 Screen 二次确认 + 口令校验通过后再调用；下载解密并给出导入预览。 */
     fun prepareRestore(id: String, passphrase: String) = launchBusy {
         when (val r = repository.prepareRestore(id, passphrase.toCharArray())) {
             is CloudBackupRepository.Result.Ok ->

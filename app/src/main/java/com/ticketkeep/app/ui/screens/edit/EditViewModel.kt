@@ -8,7 +8,6 @@ import com.ticketkeep.app.data.model.Ticket
 import com.ticketkeep.app.data.repository.TicketRepository
 import com.ticketkeep.app.ocr.MlKitOcrHelper
 import com.ticketkeep.app.ocr.OcrParseResult
-import com.ticketkeep.app.util.DateBounds
 import com.ticketkeep.app.util.DateFormats
 import com.ticketkeep.app.util.ImageStorage
 import com.ticketkeep.app.util.MoneyFormats
@@ -221,10 +220,6 @@ class EditViewModel @Inject constructor(
     fun updateNote(value: String) = _uiState.update { it.copy(note = value) }
 
     fun updatePurchaseDate(date: LocalDate) {
-        if (!DateBounds.isAllowed(date)) {
-            _uiState.update { it.copy(errorMessage = DateBounds.OUT_OF_RANGE_MESSAGE) }
-            return
-        }
         _uiState.update { state ->
             val end = if (!state.useManualWarrantyEnd) {
                 val m = state.warrantyMonthsText.toIntOrNull() ?: 0
@@ -250,12 +245,16 @@ class EditViewModel @Inject constructor(
     }
 
     fun updateWarrantyEnd(date: LocalDate) {
-        if (!DateBounds.isAllowed(date)) {
-            _uiState.update { it.copy(errorMessage = DateBounds.OUT_OF_RANGE_MESSAGE) }
-            return
-        }
+        _uiState.update { it.copy(warrantyEndDate = date, useManualWarrantyEnd = true) }
+    }
+
+    fun clearWarranty() {
         _uiState.update {
-            it.copy(warrantyEndDate = date, useManualWarrantyEnd = true, errorMessage = null)
+            it.copy(
+                warrantyMonthsText = "",
+                warrantyEndDate = null,
+                useManualWarrantyEnd = false,
+            )
         }
     }
 

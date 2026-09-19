@@ -2,32 +2,54 @@ package com.ticketkeep.app.ui.screens.settings
 
 import android.Manifest
 import android.app.Activity
+import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -35,22 +57,36 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ticketkeep.app.BuildConfig
+import com.ticketkeep.app.channel.ChannelConfig
+import com.ticketkeep.app.export.ExportShareHelper
+import com.ticketkeep.app.export.TicketCsvImporter
 import com.ticketkeep.app.notification.NotificationSettingsHelper
 import com.ticketkeep.app.ui.components.PaperCard
+import com.ticketkeep.app.ui.components.SettingsRow
+import com.ticketkeep.app.ui.theme.TicketKeepSpacing
 import kotlinx.coroutines.launch
-import android.content.pm.PackageManager
 
 /**
- * 简单设置页：通知权限状态、测试通知、电池优化与国产机自启动提示。
- * 不弹精确闹钟权限；WorkManager 调度保持不变。
+ * 「我的」— 对齐 index.html `mine()`：
+ * 标题「我的」+ YOUR SPACE；本地票证册；soft capacity；
+ * 数据与备份 / 使用偏好；导入导出 sheet；保修提醒 sheet。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,24 +94,26 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onOpenCloudBackup: () -> Unit = {},
     onOpenPaywall: () -> Unit = {},
-    showUpNavigation: Boolean = true,
+    onOpenPrivacy: () -> Unit = {},
+    showUpNavigation: Boolean = false,
+    viewModel: SettingsViewModel = hiltViewModel(),
 ) {
+    val ui by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     var notifEnabled by remember {
         mutableStateOf(NotificationSettingsHelper.areNotificationsEnabled(context))
     }
-    var batteryIgnored by remember {
-        mutableStateOf(NotificationSettingsHelper.isIgnoringBatteryOptimizations(context))
-    }
+    var showNotifSheet by remember { mutableStateOf(false) }
+    var showImportExportSheet by remember { mutableStateOf(false) }
+    var importPreview by remember { mutableStateOf<TicketCsvImporter.Preview?>(null) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 notifEnabled = NotificationSettingsHelper.areNotificationsEnabled(context)
-                batteryIgnored = NotificationSettingsHelper.isIgnoringBatteryOptimizations(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -88,6 +126,18 @@ fun SettingsScreen(
     ) {
         notifEnabled = NotificationSettingsHelper.areNotificationsEnabled(context)
         permissionRequestedOnce = true
+    }
+
+    val importCsvLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        viewModel.prepareCsvImport(
+            uri = uri,
+            onNeedPro = onOpenPaywall,
+            onPreview = { preview -> importPreview = preview },
+            onError = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
+        )
     }
 
     fun requestOrOpenNotificationPermission() {
@@ -117,62 +167,468 @@ fun SettingsScreen(
         }
     }
 
+    fun exportCsv() {
+        viewModel.exportAllCsv(
+            onNeedPro = onOpenPaywall,
+            onSuccess = { file ->
+                ExportShareHelper.shareFile(
+                    context,
+                    file,
+                    "text/csv",
+                    "导出全部 CSV",
+                )
+            },
+            onError = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
+        )
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = {
-            TopAppBar(
-                title = { Text(if (showUpNavigation) "设置" else "我的") },
-                navigationIcon = {
-                    if (showUpNavigation) {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                ),
-            )
-        },
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = TicketKeepSpacing.page),
         ) {
-            Text("通知", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(8.dp))
-            PaperCard(modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
+            // Header: 我的 + YOUR SPACE — statusBars + 8dp（status 底→标题 ≈8–12dp）
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (showUpNavigation) {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "返回",
+                            )
+                        }
+                    }
                     Text(
-                        text = if (notifEnabled) "通知权限：已授予" else "通知权限：未授予 / 已关闭",
-                        style = MaterialTheme.typography.bodyLarge,
+                        "我的",
+                        style = MaterialTheme.typography.headlineMedium.copy(
+                            fontSize = 27.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = (-0.8).sp,
+                        ),
                     )
-                    Spacer(Modifier.height(8.dp))
+                }
+                Text(
+                    "YOUR SPACE",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 2.sp,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            // Profile — 本地票证册
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 15.dp, bottom = 24.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(61.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Default.ReceiptLong,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(28.dp),
+                    )
+                }
+                Spacer(Modifier.width(14.dp))
+                Column {
                     Text(
-                        "保修到期提醒依赖系统通知。若收不到，请先确认权限与渠道开关。",
-                        style = MaterialTheme.typography.bodyMedium,
+                        "本地票证册",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        ),
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "无需登录，也能好好记录。",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Spacer(Modifier.height(12.dp))
-                    Button(
-                        onClick = { requestOrOpenNotificationPermission() },
+                }
+            }
+
+            // Capacity card
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(19.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                tonalElevation = 0.dp,
+            ) {
+                Column(Modifier.padding(18.dp)) {
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(if (notifEnabled) "打开应用通知设置" else "再次请求通知权限")
+                        Text(
+                            "已收好 ${ui.totalCount} 张票证",
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            ),
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(7.dp),
+                            color = MaterialTheme.colorScheme.background,
+                        ) {
+                            Text(
+                                text = if (ui.isPro) "Pro" else "免费版",
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                ),
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
                     }
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedButton(
+
+                    if (!ui.isPro) {
+                        Spacer(Modifier.height(14.dp))
+                        val progress = (ui.totalCount.toFloat() / ui.freeLimit.toFloat())
+                            .coerceIn(0f, 1f)
+                        LinearProgressIndicator(
+                            progress = progress,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(5.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = androidx.compose.ui.graphics.Color(0xFFCDDCC5),
+                            strokeCap = StrokeCap.Round,
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "${ui.totalCount} / ${ui.freeLimit} 张",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            if (ChannelConfig.showProPurchase) {
+                                TextButton(
+                                    onClick = onOpenPaywall,
+                                    contentPadding = PaddingValues(0.dp),
+                                ) {
+                                    Text(
+                                        "了解 Pro →",
+                                        style = MaterialTheme.typography.labelMedium.copy(
+                                            fontSize = 12.sp,
+                                        ),
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    "本地保存",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(11.dp))
+                        Text(
+                            text = if (ChannelConfig.showProPurchase) {
+                                "需要更多空间？Pro 可以保存更多票证。"
+                            } else {
+                                "当前版本暂未开放会员购买。"
+                            },
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 11.sp,
+                                lineHeight = 18.sp,
+                            ),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Pro · 不限条数",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            SectionLabel("数据与备份")
+            PaperCard(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    SettingsRow(
+                        title = "加密云备份 · Pro",
+                        subtitle = "手动备份，换机时找回票证",
+                        leadingIcon = Icons.Default.Cloud,
                         onClick = {
+                            if (ui.isPro) {
+                                onOpenCloudBackup()
+                            } else if (ChannelConfig.showProPurchase) {
+                                onOpenPaywall()
+                            } else {
+                                onOpenCloudBackup()
+                            }
+                        },
+                    )
+                    if (ChannelConfig.showProExport) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        SettingsRow(
+                            title = "导入与导出",
+                            subtitle = "CSV、PDF 与送修材料",
+                            leadingIcon = Icons.Default.Upload,
+                            onClick = { showImportExportSheet = true },
+                        )
+                    }
+                }
+            }
+
+            SectionLabel("使用偏好")
+            PaperCard(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    SettingsRow(
+                        title = "保修提醒",
+                        subtitle = "检查通知与后台设置",
+                        leadingIcon = Icons.Default.Notifications,
+                        trailing = {
+                            Text(
+                                if (notifEnabled) "已开启" else "未开启",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        },
+                        onClick = { showNotifSheet = true },
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    SettingsRow(
+                        title = "隐私与数据",
+                        subtitle = "了解本地保存与加密备份",
+                        leadingIcon = Icons.Default.VerifiedUser,
+                        onClick = onOpenPrivacy,
+                    )
+                }
+            }
+
+
+            if (BuildConfig.DEBUG) {
+                Spacer(Modifier.height(8.dp))
+                SectionLabel("调试")
+                PaperCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.debugSetPro(false)
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("已切换为普通版")
+                                }
+                            },
+                            enabled = ui.isPro,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp),
+                            shape = RoundedCornerShape(15.dp),
+                        ) { Text("模拟普通用户") }
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.debugSetPro(true)
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("已切换为 Pro")
+                                }
+                            },
+                            enabled = !ui.isPro,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp),
+                            shape = RoundedCornerShape(15.dp),
+                        ) { Text("模拟 Pro 用户") }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+            Text(
+                "票证记 · 让凭证有处可寻",
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                "v${BuildConfig.VERSION_NAME}",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 32.dp, top = 4.dp),
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+
+    if (showImportExportSheet) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { showImportExportSheet = false },
+            sheetState = sheetState,
+            containerColor = MaterialTheme.colorScheme.background,
+            shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 22.dp, vertical = 8.dp)
+                    .padding(bottom = 22.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "导入与导出",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.headlineSmall.copy(
+                            fontSize = 21.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        ),
+                    )
+                    IconButton(onClick = { showImportExportSheet = false }) {
+                        Icon(Icons.Default.Close, contentDescription = "关闭")
+                    }
+                }
+                Text(
+                    "正式版复用现有 CSV 预览、确认导入及导出逻辑。PDF 和送修材料在单张票证详情中生成。",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 12.sp,
+                        lineHeight = 21.sp,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(18.dp))
+                Button(
+                    onClick = {
+                        showImportExportSheet = false
+                        exportCsv()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp),
+                    shape = RoundedCornerShape(15.dp),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.primary,
+                    ),
+                ) {
+                    Text(
+                        "导出全部 CSV",
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        ),
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                TextButton(
+                    onClick = {
+                        showImportExportSheet = false
+                        importCsvLauncher.launch(arrayOf("text/*", "text/csv", "application/csv"))
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        "从 CSV 导入",
+                        style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+        }
+    }
+
+    if (showNotifSheet) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { showNotifSheet = false },
+            sheetState = sheetState,
+            containerColor = MaterialTheme.colorScheme.background,
+            shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 22.dp, vertical = 8.dp)
+                    .padding(bottom = 22.dp),
+            ) {
+                Text(
+                    "保修到期提醒",
+                    style = MaterialTheme.typography.headlineSmall.copy(
+                        fontSize = 21.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+                )
+                Spacer(Modifier.height(7.dp))
+                Text(
+                    "提前 7 天、1 天和到期当天提醒你。送达时间可能受手机后台限制影响。",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 12.sp,
+                        lineHeight = 21.sp,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(14.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(13.dp))
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Default.Notifications,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(9.dp))
+                    Text(
+                        text = if (notifEnabled) "通知已开启" else "通知尚未开启",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                Spacer(Modifier.height(14.dp))
+                Button(
+                    onClick = {
+                        if (notifEnabled) {
                             try {
                                 NotificationSettingsHelper.postTestNotification(context)
-                                scope.launch {
-                                    snackbarHostState.showSnackbar("已发送测试通知")
-                                }
+                                scope.launch { snackbarHostState.showSnackbar("已发送测试通知") }
                             } catch (e: Exception) {
                                 scope.launch {
                                     snackbarHostState.showSnackbar(
@@ -180,104 +636,86 @@ fun SettingsScreen(
                                     )
                                 }
                             }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                    ) {
-                        Text("发送测试通知")
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(20.dp))
-            Text("通知收不到？", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(8.dp))
-            PaperCard(modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    Text(
-                        text = if (batteryIgnored) {
-                            "电池优化：已忽略（有利于后台提醒）"
                         } else {
-                            "电池优化：未忽略（部分机型会推迟后台任务）"
-                        },
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                    Spacer(Modifier.height(8.dp))
+                            requestOrOpenNotificationPermission()
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp),
+                    shape = RoundedCornerShape(15.dp),
+                ) {
                     Text(
-                        "允许「票证记」忽略电池优化，可降低保修提醒被系统杀掉的概率。不会改动 WorkManager 调度逻辑。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        if (notifEnabled) "发送测试通知" else "开启通知",
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        ),
                     )
-                    Spacer(Modifier.height(12.dp))
-                    Button(
-                        onClick = {
-                            val ok = NotificationSettingsHelper.requestIgnoreBatteryOptimizations(context)
-                            if (!ok) {
-                                scope.launch {
-                                    snackbarHostState.showSnackbar("无法打开电池优化设置，请到系统设置中手动操作")
-                                }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                    ) {
-                        Text("请求忽略电池优化")
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = {
-                            val ok = NotificationSettingsHelper.openBatteryOptimizationSettings(context)
-                            if (!ok) {
-                                scope.launch {
-                                    snackbarHostState.showSnackbar("无法打开系统电池优化列表")
-                                }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                    ) {
-                        Text("打开电池优化设置")
-                    }
-                    Spacer(Modifier.height(16.dp))
+                }
+                Spacer(Modifier.height(4.dp))
+                TextButton(
+                    onClick = {
+                        NotificationSettingsHelper.openAppNotificationSettings(context)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Text(
-                        "国产手机自启动 / 后台提示",
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "小米 / 华为 / OPPO / vivo / 荣耀等机型可能额外限制后台。若仍收不到提醒，请到系统设置中为「票证记」开启自启动、后台运行或「允许关联启动」（路径因品牌而异，无统一系统入口）。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        "收不到提醒？",
+                        style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
+                        color = MaterialTheme.colorScheme.primary,
                     )
                 }
             }
-
-            Spacer(Modifier.height(20.dp))
-            Text("数据", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(8.dp))
-            PaperCard(modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    Text(
-                        "云备份（Pro）",
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "客户端加密后上传到自建服务器。口令不离开本机；云端只存密文。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Button(
-                        onClick = onOpenCloudBackup,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                    ) {
-                        Text("打开云备份")
-                    }
-                }
-            }
-            Spacer(Modifier.height(24.dp))
         }
     }
+
+    importPreview?.let { preview ->
+        AlertDialog(
+            onDismissRequest = { importPreview = null },
+            title = { Text("确认导入 ${preview.tickets.size} 张票证") },
+            text = {
+                Text(
+                    "将新增 ${preview.tickets.size} 张，跳过 ${preview.skippedRows} 行。" +
+                        "导入会新增记录，不覆盖本地数据；重复导入可能产生重复记录。",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val p = preview
+                        importPreview = null
+                        viewModel.confirmCsvImport(
+                            preview = p,
+                            onDone = { inserted, skipped ->
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        "已导入 $inserted 张 · 跳过 $skipped 行",
+                                    )
+                                }
+                            },
+                            onError = { msg ->
+                                scope.launch { snackbarHostState.showSnackbar(msg) }
+                            },
+                        )
+                    },
+                ) { Text("确认导入") }
+            },
+            dismissButton = {
+                TextButton(onClick = { importPreview = null }) { Text("取消") }
+            },
+        )
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text,
+        modifier = Modifier.padding(top = 17.dp, bottom = 12.dp),
+        style = MaterialTheme.typography.titleSmall.copy(
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+        ),
+    )
 }

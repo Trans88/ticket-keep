@@ -1,13 +1,13 @@
 package com.ticketkeep.app.ui.screens.edit
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -19,7 +19,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.CircularProgressIndicator
@@ -32,7 +31,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -53,7 +51,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ticketkeep.app.ui.components.PaperCard
 import com.ticketkeep.app.ui.components.TallScrollableImage
-import com.ticketkeep.app.util.DateBounds
+import com.ticketkeep.app.ui.theme.TicketKeepRadius
 import com.ticketkeep.app.util.DateFormats
 import java.time.Instant
 import java.time.LocalDate
@@ -75,7 +73,7 @@ fun EditScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text(if (state.ticketId > 0) "编辑票证" else "新建票证") },
+                title = { Text(if (state.ticketId > 0) "编辑票证" else "收好这张票证") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
@@ -95,17 +93,19 @@ fun EditScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                        .navigationBarsPadding()
+                        .imePadding()
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
                 ) {
                     Button(
                         onClick = { viewModel.save(onSaved = onSaved, onNeedPro = onNeedPro) },
                         enabled = !state.isSaving && !state.isOcrRunning,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
+                            .height(52.dp),
+                        shape = RoundedCornerShape(TicketKeepRadius.button),
                     ) {
-                        Text(if (state.isSaving) "保存中…" else "保存")
+                        Text(if (state.isSaving) "保存中…" else "保存票证")
                     }
                 }
             }
@@ -155,6 +155,11 @@ fun EditScreen(
                 Spacer(Modifier.height(12.dp))
             }
 
+            SectionTitle(
+                title = "基本信息",
+                hint = "暂时不知道的，可以稍后补充",
+            )
+            Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = state.merchantName,
                 onValueChange = viewModel::updateMerchant,
@@ -175,12 +180,9 @@ fun EditScreen(
             )
             Spacer(Modifier.height(16.dp))
 
-            DatePickField(
-                label = "购买日",
-                date = state.purchaseDate,
-                placeholder = "未设置（点此选择）",
-                onClick = { showPurchasePicker = true },
-            )
+            TextButton(onClick = { showPurchasePicker = true }) {
+                Text("购买日：${state.purchaseDate?.let { DateFormats.display.format(it) } ?: "未设置（请手选）"}")
+            }
             if (state.ocrAttempted && state.purchaseDate == null) {
                 Text(
                     "购买日期未识别，请手动设置",
@@ -189,7 +191,11 @@ fun EditScreen(
                 )
             }
 
-            Spacer(Modifier.height(12.dp))
+            SectionTitle(
+                title = "保修信息",
+                hint = "不需要保修时可留空",
+            )
+            Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = state.warrantyMonthsText,
                 onValueChange = viewModel::updateWarrantyMonths,
@@ -201,38 +207,31 @@ fun EditScreen(
                 shape = RoundedCornerShape(12.dp),
             )
             Spacer(Modifier.height(8.dp))
+            val noWarranty = state.warrantyMonthsText.isBlank() && state.warrantyEndDate == null
             Row {
                 FilterChip(
-                    selected = !state.useManualWarrantyEnd,
+                    selected = !state.useManualWarrantyEnd && !noWarranty,
                     onClick = { viewModel.toggleManualWarrantyEnd(false) },
-                    label = { Text("按月数计算到期日") },
+                    label = { Text("按月数计算") },
                     shape = RoundedCornerShape(8.dp),
                 )
                 Spacer(Modifier.padding(4.dp))
                 FilterChip(
-                    selected = state.useManualWarrantyEnd,
+                    selected = state.useManualWarrantyEnd && !noWarranty,
                     onClick = { viewModel.toggleManualWarrantyEnd(true) },
                     label = { Text("手选到期日") },
                     shape = RoundedCornerShape(8.dp),
                 )
+                Spacer(Modifier.padding(4.dp))
+                FilterChip(
+                    selected = noWarranty,
+                    onClick = { viewModel.clearWarranty() },
+                    label = { Text("不设置保修") },
+                    shape = RoundedCornerShape(8.dp),
+                )
             }
-            Spacer(Modifier.height(8.dp))
-            if (state.useManualWarrantyEnd) {
-                DatePickField(
-                    label = "保修到期日",
-                    date = state.warrantyEndDate,
-                    placeholder = "未设置（点此选择）",
-                    onClick = { showWarrantyPicker = true },
-                )
-            } else {
-                DatePickField(
-                    label = "保修到期日",
-                    date = state.warrantyEndDate,
-                    placeholder = "未设置",
-                    enabled = false,
-                    supportingText = "由保修月数自动计算",
-                    onClick = {},
-                )
+            TextButton(onClick = { showWarrantyPicker = true }) {
+                Text("保修到期：${state.warrantyEndDate?.let { DateFormats.display.format(it) } ?: "未设置"}")
             }
 
             OutlinedTextField(
@@ -325,47 +324,6 @@ private fun CollapsibleOcrRawTextCard(rawText: String) {
     }
 }
 
-/**
- * 可点击的日期字段：Outlined 外观 + 日历图标，整行点按打开 DatePicker。
- */
-@Composable
-private fun DatePickField(
-    label: String,
-    date: LocalDate?,
-    placeholder: String,
-    enabled: Boolean = true,
-    supportingText: String? = null,
-    onClick: () -> Unit,
-) {
-    val text = date?.let { DateFormats.display.format(it) } ?: placeholder
-    Box(modifier = Modifier.fillMaxWidth()) {
-        OutlinedTextField(
-            value = text,
-            onValueChange = {},
-            readOnly = true,
-            enabled = enabled,
-            label = { Text(label) },
-            trailingIcon = {
-                Icon(
-                    Icons.Outlined.CalendarMonth,
-                    contentDescription = if (enabled) "打开日期选择" else null,
-                )
-            },
-            supportingText = supportingText?.let { msg -> { Text(msg) } },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            shape = RoundedCornerShape(12.dp),
-        )
-        if (enabled) {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .clickable(onClick = onClick),
-            )
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EpochDayPickerDialog(
@@ -373,22 +331,8 @@ private fun EpochDayPickerDialog(
     onDismiss: () -> Unit,
     onConfirm: (LocalDate) -> Unit,
 ) {
-    val min = DateBounds.MIN
-    val max = DateBounds.max()
-    val initialClamped = initial.coerceIn(min, max)
-    val millis = initialClamped.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
-    val pickerState = rememberDatePickerState(
-        initialSelectedDateMillis = millis,
-        yearRange = DateBounds.yearRange(),
-        selectableDates = object : SelectableDates {
-            override fun isSelectableDate(utcTimeMillis: Long): Boolean {
-                val date = Instant.ofEpochMilli(utcTimeMillis).atZone(ZoneOffset.UTC).toLocalDate()
-                return DateBounds.isAllowed(date)
-            }
-
-            override fun isSelectableYear(year: Int): Boolean = year in DateBounds.yearRange()
-        },
-    )
+    val millis = initial.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+    val pickerState = rememberDatePickerState(initialSelectedDateMillis = millis)
     DatePickerDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
@@ -406,5 +350,24 @@ private fun EpochDayPickerDialog(
         shape = RoundedCornerShape(16.dp),
     ) {
         DatePicker(state = pickerState)
+    }
+}
+
+@Composable
+private fun SectionTitle(title: String, hint: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            hint,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }

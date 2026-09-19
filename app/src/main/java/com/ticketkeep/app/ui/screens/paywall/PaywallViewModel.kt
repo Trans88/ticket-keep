@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
- * Pro 墙：展示价格、发起购买/恢复，并观察本地 Pro 状态。
+ * Pro 墙：展示价格、发起购买/恢复，并观察本地 Pro 状态与票证数量。
  */
 @HiltViewModel
 class PaywallViewModel @Inject constructor(
@@ -26,6 +26,10 @@ class PaywallViewModel @Inject constructor(
 
     val isPro: StateFlow<Boolean> = repository.observeIsPro()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** 本地已有票证数量（状态行「已有 N 张票证」）。 */
+    val ticketCount: StateFlow<Int> = repository.observeCount()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     val connectionState: StateFlow<BillingConnectionState> = billingManager.connectionState
     val productDetails: StateFlow<ProductDetails?> = billingManager.productDetails
@@ -37,6 +41,12 @@ class PaywallViewModel @Inject constructor(
 
     init {
         // 进入 Paywall 时再拉一次商品与购买状态
+        billingManager.startConnectionAndRefresh()
+        billingManager.refreshProductDetails()
+    }
+
+    /** 重新连接 Billing 并拉取商品价格。 */
+    fun refresh() {
         billingManager.startConnectionAndRefresh()
         billingManager.refreshProductDetails()
     }

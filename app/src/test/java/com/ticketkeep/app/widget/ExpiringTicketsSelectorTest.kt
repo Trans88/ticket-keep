@@ -71,4 +71,26 @@ class ExpiringTicketsSelectorTest {
         assertEquals("还剩 3 天", ExpiringTicketsSelector.statusLabel(today + 3, today))
         assertTrue(ExpiringTicketsSelector.isExpired(today - 1, today))
     }
+
+    @Test
+    fun statusKindsAlignAppSoonThreshold() {
+        // 与 App warrantyStatusOf：>30 Active / 0..30 Soon / <0 Expired
+        assertEquals(
+            ExpiringTicketsSelector.RowStatusKind.Expired,
+            ExpiringTicketsSelector.statusKind(today - 1, today),
+        )
+        assertEquals(
+            ExpiringTicketsSelector.RowStatusKind.Soon,
+            ExpiringTicketsSelector.statusKind(today, today),
+        )
+        assertEquals(
+            ExpiringTicketsSelector.RowStatusKind.Soon,
+            ExpiringTicketsSelector.statusKind(today + 30, today),
+        )
+        assertEquals(
+            ExpiringTicketsSelector.RowStatusKind.Active,
+            ExpiringTicketsSelector.statusKind(today + 31, today),
+        )
+        assertEquals(30, ExpiringTicketsSelector.SOON_DAYS_THRESHOLD)
+    }
 }

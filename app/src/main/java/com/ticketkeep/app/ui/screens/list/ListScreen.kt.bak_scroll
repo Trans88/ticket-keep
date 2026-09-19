@@ -291,152 +291,138 @@ fun ListScreen(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .padding(horizontal = TicketKeepSpacing.page),
-            contentPadding = PaddingValues(bottom = 24.dp),
         ) {
-            // 整页正文同一 LazyColumn：顶栏/英雄卡/搜索筛选/分区头/列表同滚；底栏在外层固定。
-            item(key = "home_header") {
-                // —— 自定义标题区（非挤在一起的 TopAppBar）——
-                // 顶栏仅铃铛（对齐原型）；CSV/隐私/Pro 在「我的」等 overflow 入口
-                HomeHeader(
-                    onBellClick = { showReminderSheet = true },
-                )
-            }
+            // —— 自定义标题区（非挤在一起的 TopAppBar）——
+            // 顶栏仅铃铛（对齐原型）；CSV/隐私/Pro 在「我的」等 overflow 入口
+            HomeHeader(
+                onBellClick = { showReminderSheet = true },
+            )
 
             if (showHero) {
-                item(key = "summary_hero") {
-                    TicketSummaryHero(
-                        totalCount = state.totalCount,
-                        soonCount = state.soonCount,
-                        onActionClick = {
-                            if (state.soonCount > 0) {
-                                viewModel.applySoonFilter()
-                            } else {
-                                viewModel.clearFilter()
-                                viewModel.setQuickFilter(ListQuickFilter.ALL)
-                            }
-                        },
-                    )
-                    Spacer(Modifier.height(TicketKeepSpacing.md))
-                }
-            }
-
-            item(key = "search_filter") {
-                // —— 搜索行 + 筛选 iconbtn（真机缺口）——
-                SearchFilterRow(
-                    query = state.query,
-                    onQueryChange = viewModel::onQueryChange,
-                    onFilterClick = { showMoreFilters = true },
-                )
-                Spacer(Modifier.height(10.dp))
-
-                QuickFilterChips(
-                    quickFilter = state.quickFilter,
-                    onQuick = viewModel::setQuickFilter,
-                )
-                Spacer(Modifier.height(4.dp))
-            }
-
-            item(key = "section_head") {
-                // 空态也显示分区头（对齐原型 home()：section-head + emptyContent）
-                SectionHeadRow(
-                    title = when {
-                        state.query.isNotBlank() -> "搜索结果"
-                        state.quickFilter != ListQuickFilter.ALL || state.filter.hasActiveConstraints ->
-                            "筛选结果"
-                        else -> "最近收好"
+                TicketSummaryHero(
+                    totalCount = state.totalCount,
+                    soonCount = state.soonCount,
+                    onActionClick = {
+                        if (state.soonCount > 0) {
+                            viewModel.applySoonFilter()
+                        } else {
+                            viewModel.clearFilter()
+                            viewModel.setQuickFilter(ListQuickFilter.ALL)
+                        }
                     },
-                    countLabel = "${state.tickets.size} 张 · 最近添加",
                 )
+                Spacer(Modifier.height(TicketKeepSpacing.md))
             }
+
+            // —— 搜索行 + 筛选 iconbtn（真机缺口）——
+            SearchFilterRow(
+                query = state.query,
+                onQueryChange = viewModel::onQueryChange,
+                onFilterClick = { showMoreFilters = true },
+            )
+            Spacer(Modifier.height(10.dp))
+
+            QuickFilterChips(
+                quickFilter = state.quickFilter,
+                onQuick = viewModel::setQuickFilter,
+            )
+            Spacer(Modifier.height(4.dp))
+
+            // 空态也显示分区头（对齐原型 home()：section-head + emptyContent）
+            SectionHeadRow(
+                title = when {
+                    state.query.isNotBlank() -> "搜索结果"
+                    state.quickFilter != ListQuickFilter.ALL || state.filter.hasActiveConstraints ->
+                        "筛选结果"
+                    else -> "最近收好"
+                },
+                countLabel = "${state.tickets.size} 张 · 最近添加",
+            )
 
             if (showNotificationBanner) {
-                item(key = "notif_banner") {
-                    NotifBanner(
-                        onDismiss = {
-                            notificationBannerDismissed = true
-                            bannerPrefs.edit().putBoolean(KEY_NOTIF_BANNER_DISMISSED, true).apply()
-                        },
-                        onEnable = {
-                            val activity = context as? Activity
-                            val shouldShow = activity?.shouldShowRequestPermissionRationale(
-                                Manifest.permission.POST_NOTIFICATIONS,
-                            ) == true
-                            val openSettings = notificationRequestedOnce && !shouldShow
-                            if (openSettings) {
-                                val intent = Intent(
-                                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                    Uri.fromParts("package", context.packageName, null),
-                                )
-                                context.startActivity(intent)
-                            } else {
-                                notificationRequestedOnce = true
-                                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            }
-                        },
-                    )
-                    Spacer(Modifier.height(12.dp))
-                }
+                NotifBanner(
+                    onDismiss = {
+                        notificationBannerDismissed = true
+                        bannerPrefs.edit().putBoolean(KEY_NOTIF_BANNER_DISMISSED, true).apply()
+                    },
+                    onEnable = {
+                        val activity = context as? Activity
+                        val shouldShow = activity?.shouldShowRequestPermissionRationale(
+                            Manifest.permission.POST_NOTIFICATIONS,
+                        ) == true
+                        val openSettings = notificationRequestedOnce && !shouldShow
+                        if (openSettings) {
+                            val intent = Intent(
+                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                Uri.fromParts("package", context.packageName, null),
+                            )
+                            context.startActivity(intent)
+                        } else {
+                            notificationRequestedOnce = true
+                            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                    },
+                )
+                Spacer(Modifier.height(12.dp))
             } else if (showProBanner) {
-                item(key = "pro_banner") {
-                    ProBanner(
-                        onOpenPaywall = onOpenPaywall,
-                        onDismiss = {
-                            proBannerDismissed = true
-                            bannerPrefs.edit().putBoolean(KEY_PRO_BANNER_DISMISSED, true).apply()
-                        },
-                    )
-                    Spacer(Modifier.height(12.dp))
-                }
+                ProBanner(
+                    onOpenPaywall = onOpenPaywall,
+                    onDismiss = {
+                        proBannerDismissed = true
+                        bannerPrefs.edit().putBoolean(KEY_PRO_BANNER_DISMISSED, true).apply()
+                    },
+                )
+                Spacer(Modifier.height(12.dp))
             }
 
             if (state.tickets.isEmpty()) {
-                item(key = "empty_tickets") {
-                    EmptyTicketContent(
-                        firstRun = isFirstEmpty || (!state.isFilterOrSearchActive && state.totalCount == 0),
-                        onPrimary = {
-                            if (state.isFilterOrSearchActive || state.query.isNotBlank()) {
-                                viewModel.clearFilter()
-                                viewModel.onQueryChange("")
-                                showMoreFilters = false
-                            } else {
-                                openAddSheet()
-                            }
-                        },
-                    )
-                }
+                EmptyTicketContent(
+                    firstRun = isFirstEmpty || (!state.isFilterOrSearchActive && state.totalCount == 0),
+                    onPrimary = {
+                        if (state.isFilterOrSearchActive || state.query.isNotBlank()) {
+                            viewModel.clearFilter()
+                            viewModel.onQueryChange("")
+                            showMoreFilters = false
+                        } else {
+                            openAddSheet()
+                        }
+                    },
+                )
             } else {
-                items(
-                    items = state.tickets,
-                    key = { it.id },
-                ) { ticket ->
-                    TicketRow(ticket = ticket, onClick = { onOpenDetail(ticket.id) })
-                    Spacer(Modifier.height(10.dp))
-                }
-                item(key = "local_lock_footer") {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 20.dp, bottom = 8.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            Icons.Default.Lock,
-                            contentDescription = null,
-                            modifier = Modifier.size(12.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            "票证保存在本机，备份由你决定",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                LazyColumn(
+                    contentPadding = PaddingValues(bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    items(state.tickets, key = { it.id }) { ticket ->
+                        TicketRow(ticket = ticket, onClick = { onOpenDetail(ticket.id) })
+                    }
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 20.dp, bottom = 8.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Default.Lock,
+                                contentDescription = null,
+                                modifier = Modifier.size(12.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                "票证保存在本机，备份由你决定",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }

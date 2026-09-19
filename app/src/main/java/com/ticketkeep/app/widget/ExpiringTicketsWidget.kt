@@ -35,6 +35,7 @@ import java.time.LocalDate
 /**
  * 临期桌面小组件（Jetpack Glance）：薄荷纸感列表，最多 5 条。
  * 数据来自 Room [TicketDao.getAllWithWarranty]，选条见 [ExpiringTicketsSelector]。
+ * 行状态色对齐 App WarrantyStatusChip：有效 Success / 临期 Warning 琥珀 / 过期 onSurfaceVariant（不用医疗红）。
  */
 class ExpiringTicketsWidget : GlanceAppWidget() {
 
@@ -68,9 +69,12 @@ private fun ExpiringTicketsContent(
     val paperBg = Color(0xFFF4F7F6)
     val paperSurface = Color(0xFFFFFFFF)
     val onPaper = Color(0xFF1C1F1E)
+    // 与 ui/theme/Color.kt PaperOnSurfaceVariant 一致（过期降权灰）
     val muted = Color(0xFF5C6B66)
     val mint = Color(0xFF0F766E)
-    val error = Color(0xFFB91C1C)
+    // 与 App WarrantyStatusChip 语义色对齐（Color.kt Success / Warning）
+    val success = Color(0xFF15803D)
+    val warning = Color(0xFFB45309)
 
     Column(
         modifier = GlanceModifier
@@ -91,7 +95,7 @@ private fun ExpiringTicketsContent(
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                 ),
-                modifier = GlanceModifier,
+                modifier = GlanceModifier.defaultWeight(),
             )
             Text(
                 text = "打开",
@@ -141,7 +145,8 @@ private fun ExpiringTicketsContent(
                     surface = paperSurface,
                     onPaper = onPaper,
                     muted = muted,
-                    error = error,
+                    success = success,
+                    warning = warning,
                 )
             }
         }
@@ -157,13 +162,18 @@ private fun TicketRow(
     surface: Color,
     onPaper: Color,
     muted: Color,
-    error: Color,
+    success: Color,
+    warning: Color,
 ) {
-    val expired = ExpiringTicketsSelector.isExpired(end, todayEpochDay)
     val status = ExpiringTicketsSelector.statusLabel(end, todayEpochDay)
     val name = ticket.merchantName.ifBlank { "未命名票证" }
     val dateText = DateFormats.formatEpochDay(end)
-    val statusColor = if (expired) error else muted
+    // 色映射对齐 App WarrantyStatusChip：Active=Success / Soon=Warning / Expired=onSurfaceVariant
+    val statusColor = when (ExpiringTicketsSelector.statusKind(end, todayEpochDay)) {
+        ExpiringTicketsSelector.RowStatusKind.Expired -> muted
+        ExpiringTicketsSelector.RowStatusKind.Soon -> warning
+        ExpiringTicketsSelector.RowStatusKind.Active -> success
+    }
 
     Row(
         modifier = GlanceModifier
@@ -174,7 +184,7 @@ private fun TicketRow(
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(modifier = GlanceModifier) {
+        Column(modifier = GlanceModifier.defaultWeight()) {
             Text(
                 text = name,
                 style = TextStyle(

@@ -26,6 +26,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -269,11 +270,7 @@ class BillingManager @Inject constructor(
         val purchases = result.purchasesList
         handlePurchases(purchases)
         val owned = purchases.any { isActiveProPurchase(it) }
-        if (owned) {
-            proPreferences.setPro(true)
-        } else if (clearProIfNone) {
-            proPreferences.setPro(false)
-        }
+        syncProFromBilling(owned = owned, clearIfNone = clearProIfNone)
     }
 
     private suspend fun hasActiveProPurchase(): Boolean {
@@ -303,8 +300,24 @@ class BillingManager @Inject constructor(
                 }
             }
             if (purchase.purchaseState == Purchase.PurchaseState.PURCHASED) {
-                proPreferences.setPro(true)
+                syncProFromBilling(owned = true, clearIfNone = false)
             }
+        }
+    }
+
+
+    /**
+     * 将 Play 查询结果同步到 Pro 缓存。
+     * Debug 模拟开通锁定（[ProPreferences.isDebugOverride]）时跳过，避免冲掉假 Pro。
+     */
+    private suspend fun syncProFromBilling(owned: Boolean, clearIfNone: Boolean) {
+        if (proPreferences.isDebugOverride.first()) {
+            return
+        }
+        if (owned) {
+            proPreferences.setPro(true)
+        } else if (clearIfNone) {
+            proPreferences.setPro(false)
         }
     }
 

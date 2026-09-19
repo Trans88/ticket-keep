@@ -17,6 +17,7 @@ android {
         versionCode = 1
         versionName = "1.0.0-mvp"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "BACKUP_BASE_URL", "\"https://api.trans88.cn\"")
     }
 
     buildTypes {
@@ -103,6 +104,11 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.android.billing.ktx)
+    implementation(libs.okhttp)
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.converter.gson)
+    implementation(libs.gson)
+    implementation(libs.androidx.security.crypto)
 
     testImplementation(libs.junit)
 }

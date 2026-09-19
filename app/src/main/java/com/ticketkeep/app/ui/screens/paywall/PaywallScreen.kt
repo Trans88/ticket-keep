@@ -202,7 +202,7 @@ fun PaywallScreen(
                             .fillMaxWidth()
                             .height(48.dp),
                         shape = RoundedCornerShape(12.dp),
-                    ) { Text("模拟开通 Pro（调试）") }
+                    ) { Text("模拟开通 Pro（调试，防 Billing 冲掉）") }
                 }
             }
 

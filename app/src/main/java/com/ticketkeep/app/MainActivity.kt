@@ -32,6 +32,7 @@ import com.ticketkeep.app.ui.screens.detail.DetailScreen
 import com.ticketkeep.app.ui.screens.edit.EditScreen
 import com.ticketkeep.app.ui.screens.list.ListScreen
 import com.ticketkeep.app.ui.screens.settings.SettingsScreen
+import com.ticketkeep.app.ui.screens.backup.CloudBackupScreen
 import com.ticketkeep.app.ui.screens.paywall.PaywallScreen
 import com.ticketkeep.app.ui.screens.privacy.PrivacyPolicyScreen
 import com.ticketkeep.app.ui.theme.TicketKeepTheme
@@ -123,7 +124,20 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         composable(Routes.SETTINGS) {
-                            SettingsScreen(onBack = { navController.popBackStack() })
+                            SettingsScreen(
+                                onBack = { navController.popBackStack() },
+                                onOpenCloudBackup = { navController.navigate(Routes.CLOUD_BACKUP) },
+                                onOpenPaywall = { navController.navigate(Routes.PAYWALL) },
+                            )
+                        }
+                        composable(Routes.CLOUD_BACKUP) {
+                            CloudBackupScreen(
+                                onBack = { navController.popBackStack() },
+                                onNeedPro = {
+                                    navController.popBackStack()
+                                    navController.navigate(Routes.PAYWALL)
+                                },
+                            )
                         }
 
                         composable(Routes.PRIVACY) {

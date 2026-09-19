@@ -56,6 +56,8 @@ import android.content.pm.PackageManager
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onOpenCloudBackup: () -> Unit = {},
+    onOpenPaywall: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -244,6 +246,32 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+            Text("数据", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            PaperCard(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp)) {
+                    Text(
+                        "云备份（Pro）",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "客户端加密后上传到自建服务器。口令不离开本机；云端只存密文。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Button(
+                        onClick = onOpenCloudBackup,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Text("打开云备份")
+                    }
                 }
             }
             Spacer(Modifier.height(24.dp))

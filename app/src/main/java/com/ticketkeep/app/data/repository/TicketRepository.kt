@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
 /**
- * 票证仓库：本地读写、免费额度门禁、提醒调度；Pro 观察来自 Billing 缓存。
+ * 票证仓库：本地读写、免费条数门禁、提醒调度；Pro 观察与 Debug 开关。
  */
 @Singleton
 class TicketRepository @Inject constructor(
@@ -22,7 +22,7 @@ class TicketRepository @Inject constructor(
     companion object {
         const val FREE_TICKET_LIMIT = 10
 
-        /** 免费额度门禁：Pro 不限；非 Pro 仅当已有条数 < 上限。 */
+        /** 免费条数门禁：Pro 无限；非 Pro 当前票证数量 < 限额。 */
         fun canAdd(isPro: Boolean, count: Int, limit: Int = FREE_TICKET_LIMIT): Boolean {
             if (isPro) return true
             return count < limit
@@ -65,11 +65,11 @@ class TicketRepository @Inject constructor(
     }
 
     /**
-     * 仅 Debug：本地假开关。正式 Pro 由 [com.ticketkeep.app.billing.BillingManager] 同步。
+     * 仅 Debug：Paywall 快开关走 setDebugPro；Billing 正式路径由 BillingManager 调 ProPreferences.setPro。
      */
     suspend fun setPro(enabled: Boolean) {
         if (BuildConfig.DEBUG) {
-            proPreferences.setPro(enabled)
+            proPreferences.setDebugPro(enabled)
         }
     }
 

@@ -78,8 +78,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -268,8 +270,14 @@ fun ListScreen(
         showAddSheet = true
     }
 
+    // 底栏用递增计数触发打开；List 离场再回来时 addTrigger 仍 >0，
+    // 必须记住已消费值，否则存完票 / 从「我的」回首页会再次弹出。
+    var consumedAddTrigger by rememberSaveable { mutableIntStateOf(0) }
     LaunchedEffect(addTrigger) {
-        if (addTrigger > 0) openAddSheet()
+        if (addTrigger > 0 && addTrigger != consumedAddTrigger) {
+            consumedAddTrigger = addTrigger
+            openAddSheet()
+        }
     }
 
     fun launchGallery() {

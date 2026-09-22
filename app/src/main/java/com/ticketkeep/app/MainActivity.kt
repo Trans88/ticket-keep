@@ -49,6 +49,9 @@ import com.ticketkeep.app.ui.screens.splash.BrandLaunchFrame
 import com.ticketkeep.app.ui.theme.TicketKeepTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
+import com.ticketkeep.app.ui.screens.batch.BatchImportSession
+import com.ticketkeep.app.ui.screens.batch.BatchReviewScreen
+import javax.inject.Inject
 
 /**
  * 应用唯一 Activity：Compose 导航、Splash、通知深链与权限请求入口。
@@ -56,6 +59,9 @@ import kotlinx.coroutines.delay
  */
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject
+    lateinit var batchImportSession: BatchImportSession
 
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* no-op */ }
@@ -134,6 +140,10 @@ class MainActivity : ComponentActivity() {
                                         onCreateWithImage = { uri ->
                                             navController.navigate(Routes.edit(imageUri = uri.toString()))
                                         },
+                                        onCreateWithImages = { uris ->
+                                            batchImportSession.set(uris)
+                                            navController.navigate(Routes.BATCH_REVIEW)
+                                        },
                                         onOpenPaywall = { navController.navigate(Routes.PAYWALL) },
                                         onCreateBlank = { navController.navigate(Routes.edit()) },
                                         onOpenPrivacy = { navController.navigate(Routes.PRIVACY) },
@@ -175,6 +185,13 @@ class MainActivity : ComponentActivity() {
                                         onNeedPro = {
                                             navController.navigate(Routes.PAYWALL)
                                         },
+                                    )
+                                }
+                                composable(Routes.BATCH_REVIEW) {
+                                    BatchReviewScreen(
+                                        onBack = { navController.popBackStack() },
+                                        onDone = { navController.popBackStack() },
+                                        onOpenPaywall = { navController.navigate(Routes.PAYWALL) },
                                     )
                                 }
                                 composable(Routes.PAYWALL) {

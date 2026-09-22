@@ -1,61 +1,52 @@
 package com.ticketkeep.app.data.local
 
-import android.content.Context
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.booleanPreferencesKey
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.preferencesDataStore
-import dagger.hilt.android.qualifiers.ApplicationContext
+import com.ticketkeep.app.entitlement.EntitlementRepository
+import com.ticketkeep.app.entitlement.EntitlementStore
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
-
-private val Context.proDataStore: DataStore<Preferences> by preferencesDataStore(name = "pro_prefs")
 
 /**
- * Pro 会员本地缓存（DataStore）。
+ * 兼容层：旧代码仍可注入 [ProPreferences]。
  *
- * Keys:
- * - `is_pro`：当前是否按 Pro 对待（UI / 门禁观察此值）
- * - `debug_pro_override`：Debug 模拟开通锁定；为 true 时 Billing 同步不得改写 `is_pro`
+ * - [isPro] → 本地高级版 **或** 旧年订有效（[EntitlementRepository.observeHasLocalPremium]）
+ * - [setPro] **已弃用**：不再表示「开通一切」；仅在非 Debug 路径忽略，Debug 请用 [setDebugPro]（仅本地）
+ * - 云权益请走 [EntitlementRepository]
  *
- * 正式权威来源仍是 Google Play Billing；[setPro] 仅供 Billing 正式路径。
- * Debug 假开关必须走 [setDebugPro]，避免 refreshPurchases 把模拟状态冲掉。
+ * 正式写入权威路径：BillingManager → EntitlementRepository。
  */
 @Singleton
 class ProPreferences @Inject constructor(
-    @ApplicationContext private val context: Context,
+    private val entitlementRepository: EntitlementRepository,
+    private val entitlementStore: EntitlementStore,
 ) {
-    private val keyIsPro = booleanPreferencesKey("is_pro")
-    private val keyDebugOverride = booleanPreferencesKey("debug_pro_override")
+    /** @deprecated 语义变为「本地高级 / 旧年订」，不含云备份。 */
+    val isPro: Flow<Boolean> = entitlementRepository.observeHasLocalPremium()
 
-    val isPro: Flow<Boolean> = context.proDataStore.data.map { prefs ->
-        prefs[keyIsPro] ?: false
-    }
-
-    /** Debug 模拟开通是否锁定中（Billing 同步应跳过）。 */
-    val isDebugOverride: Flow<Boolean> = context.proDataStore.data.map { prefs ->
-        prefs[keyDebugOverride] ?: false
-    }
+    /** Debug 本地模拟是否锁定。 */
+    val isDebugOverride: Flow<Boolean> = entitlementStore.isDebugLocalOverride
 
     /**
-     * 由 Billing 成功查询/购买后调用以同步缓存。
-     * 正式路径必须走 Play Billing；Debug 假开关请用 [setDebugPro]。
+     * @deprecated 禁止再把单一 setPro(true) 当成开通全部权益。
+     * Billing 正式路径应分别调用 [EntitlementRepository.applyPlayLocalUnlock] /
+     * [EntitlementRepository.applyPlayCloudSub] / [EntitlementRepository.applyLegacyYearly]。
+     * 此方法仅同步「本地高级」布尔缓存，**不**授予云。
      */
+    @Deprecated(
+        message = "Use EntitlementRepository.applyPlayLocalUnlock / applyLegacyYearly",
+        replaceWith = ReplaceWith(
+            "entitlementRepository.applyPlayLocalUnlock(enabled)",
+            "com.ticketkeep.app.entitlement.EntitlementRepository",
+        ),
+    )
     suspend fun setPro(enabled: Boolean) {
-        context.proDataStore.edit { it[keyIsPro] = enabled }
+        entitlementRepository.applyPlayLocalUnlock(enabled)
     }
 
     /**
-     * Debug 专用：同时写入 `is_pro` 与 `debug_pro_override`。
-     * enabled=true → 锁定模拟 Pro；enabled=false → 解除锁定并回到免费。
+     * Debug 专用：仅模拟本地高级版（不再隐含云备份）。
      */
     suspend fun setDebugPro(enabled: Boolean) {
-        context.proDataStore.edit { prefs ->
-            prefs[keyIsPro] = enabled
-            prefs[keyDebugOverride] = enabled
-        }
+        entitlementRepository.setDebugLocal(enabled)
     }
 }

@@ -11,6 +11,8 @@ object Routes {
     const val SETTINGS = "settings"
     const val CLOUD_BACKUP = "cloud_backup"
     const val PRIVACY = "privacy"
+    /** 批量相册核对：URI 经 BatchImportSession 传递，不走 nav args */
+    const val BATCH_REVIEW = "batch_review"
 
     fun detail(ticketId: Long) = "detail/$ticketId"
 

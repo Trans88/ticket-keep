@@ -20,7 +20,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * 详情页状态：加载票证、删除、Pro 校验后导出 PDF / 送修材料包。
+ * 详情页：PDF / 送修材料门禁为本地高级版（非云订阅）。
  */
 @HiltViewModel
 class DetailViewModel @Inject constructor(
@@ -45,16 +45,13 @@ class DetailViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Pro 门禁：非 Pro → [onNeedPro]（去 Paywall）；成功 → [onSuccess] 返回缓存 PDF。
-     */
     fun exportPdf(
         onNeedPro: () -> Unit,
         onSuccess: (File) -> Unit,
         onError: (String) -> Unit,
     ) {
         viewModelScope.launch {
-            if (!repository.observeIsPro().first()) {
+            if (!repository.observeHasLocalPremium().first()) {
                 onNeedPro()
                 return@launch
             }
@@ -72,16 +69,13 @@ class DetailViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Pro 门禁：生成理赔/送修材料包 PDF；非 Pro → [onNeedPro]。
-     */
     fun exportClaimPack(
         onNeedPro: () -> Unit,
         onSuccess: (File) -> Unit,
         onError: (String) -> Unit,
     ) {
         viewModelScope.launch {
-            if (!repository.observeIsPro().first()) {
+            if (!repository.observeHasLocalPremium().first()) {
                 onNeedPro()
                 return@launch
             }

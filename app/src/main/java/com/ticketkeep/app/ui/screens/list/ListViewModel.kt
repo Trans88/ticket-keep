@@ -37,7 +37,7 @@ enum class ListQuickFilter {
 }
 
 /**
- * 列表页 UI 状态：搜索+筛选后的票证、全量摘要、筛选条件与 Pro/免费额度。
+ * 列表页 UI 状态：搜索+筛选、本地高级版门禁（CSV）与免费额度。
  */
 data class ListUiState(
     val tickets: List<Ticket> = emptyList(),
@@ -84,7 +84,7 @@ class ListViewModel @Inject constructor(
                     repository.observeTickets(qf.query),
                     repository.observeTickets(""),
                     repository.observeCount(),
-                    repository.observeIsPro(),
+                    repository.observeHasLocalPremium(),
                 ) { filteredByQuery, allTickets, total, isPro ->
                     val today = LocalDate.now()
                     val effectiveFilter = if (qf.quick == ListQuickFilter.SOON) {
@@ -182,7 +182,7 @@ class ListViewModel @Inject constructor(
         onError: (String) -> Unit,
     ) {
         viewModelScope.launch {
-            if (!repository.observeIsPro().first()) {
+            if (!repository.observeHasLocalPremium().first()) {
                 onNeedPro()
                 return@launch
             }
@@ -203,7 +203,7 @@ class ListViewModel @Inject constructor(
         onError: (String) -> Unit,
     ) {
         viewModelScope.launch {
-            if (!repository.observeIsPro().first()) {
+            if (!repository.observeHasLocalPremium().first()) {
                 onNeedPro()
                 return@launch
             }
@@ -229,7 +229,7 @@ class ListViewModel @Inject constructor(
         onError: (String) -> Unit,
     ) {
         viewModelScope.launch {
-            if (!repository.observeIsPro().first()) {
+            if (!repository.observeHasLocalPremium().first()) {
                 onError("需要 Pro 才能导入")
                 return@launch
             }

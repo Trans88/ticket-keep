@@ -22,11 +22,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * 「我的」页状态：本地票证容量与 Pro 标记；CSV 导入/导出（Play · Pro）。
+ * 「我的」页：容量与双权益状态（本地高级版 / 云备份）；CSV 门禁看本地高级。
  */
 data class SettingsUiState(
     val totalCount: Int = 0,
+    /** 兼容：= hasLocalPremium */
     val isPro: Boolean = false,
+    val hasLocalPremium: Boolean = false,
+    val canUseCloud: Boolean = false,
     val freeLimit: Int = TicketRepository.FREE_TICKET_LIMIT,
 )
 
@@ -38,11 +41,14 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
     val uiState: StateFlow<SettingsUiState> = combine(
         repository.observeCount(),
-        repository.observeIsPro(),
-    ) { count, isPro ->
+        repository.observeHasLocalPremium(),
+        repository.observeCanUseCloud(),
+    ) { count, local, cloud ->
         SettingsUiState(
             totalCount = count,
-            isPro = isPro,
+            isPro = local,
+            hasLocalPremium = local,
+            canUseCloud = cloud,
             freeLimit = TicketRepository.FREE_TICKET_LIMIT,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
@@ -53,7 +59,7 @@ class SettingsViewModel @Inject constructor(
         onError: (String) -> Unit,
     ) {
         viewModelScope.launch {
-            if (!repository.observeIsPro().first()) {
+            if (!repository.observeHasLocalPremium().first()) {
                 onNeedPro()
                 return@launch
             }
@@ -74,7 +80,7 @@ class SettingsViewModel @Inject constructor(
         onError: (String) -> Unit,
     ) {
         viewModelScope.launch {
-            if (!repository.observeIsPro().first()) {
+            if (!repository.observeHasLocalPremium().first()) {
                 onNeedPro()
                 return@launch
             }
@@ -100,8 +106,8 @@ class SettingsViewModel @Inject constructor(
         onError: (String) -> Unit,
     ) {
         viewModelScope.launch {
-            if (!repository.observeIsPro().first()) {
-                onError("需要 Pro 才能导入")
+            if (!repository.observeHasLocalPremium().first()) {
+                onError("需要本地高级版才能导入")
                 return@launch
             }
             try {
@@ -120,12 +126,23 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    /**
-     * 仅 Debug：模拟 Pro / 普通版，写入 [TicketRepository.setPro]（走 debug_pro_override）。
-     */
     fun debugSetPro(enabled: Boolean) {
         if (!BuildConfig.DEBUG) return
-        viewModelScope.launch { repository.setPro(enabled) }
+        viewModelScope.launch { repository.setDebugLocal(enabled) }
     }
 
+    fun debugSetLocal(enabled: Boolean) {
+        if (!BuildConfig.DEBUG) return
+        viewModelScope.launch { repository.setDebugLocal(enabled) }
+    }
+
+    fun debugSetCloud(enabled: Boolean) {
+        if (!BuildConfig.DEBUG) return
+        viewModelScope.launch { repository.setDebugCloud(enabled) }
+    }
+
+    fun debugAllOff() {
+        if (!BuildConfig.DEBUG) return
+        viewModelScope.launch { repository.setDebugAllOff() }
+    }
 }

@@ -143,6 +143,7 @@ import kotlinx.coroutines.launch
 fun ListScreen(
     onOpenDetail: (Long) -> Unit,
     onCreateWithImage: (Uri) -> Unit,
+    onCreateWithImages: (List<Uri>) -> Unit = {},
     onCreateBlank: () -> Unit,
     onOpenPaywall: () -> Unit,
     onOpenPrivacy: () -> Unit = {},
@@ -206,9 +207,19 @@ fun ListScreen(
     }
 
     val pickMedia = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia(),
-    ) { uri ->
-        if (uri != null) onCreateWithImage(uri)
+        ActivityResultContracts.PickMultipleVisualMedia(maxItems = 10),
+    ) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        val capped = if (uris.size > 10) {
+            scope.launch { snackbarHostState.showSnackbar("最多 10 张") }
+            uris.take(10)
+        } else {
+            uris
+        }
+        when {
+            capped.size == 1 -> onCreateWithImage(capped.first())
+            else -> onCreateWithImages(capped)
+        }
     }
 
     val takePicture = rememberLauncherForActivityResult(
@@ -253,7 +264,8 @@ fun ListScreen(
     }
 
     fun openAddSheet() {
-        tryAdd { showAddSheet = true }
+        // 相册批量允许在名额为 0 时进入核对页，保存时再门禁；故打开 sheet 不预检额度
+        showAddSheet = true
     }
 
     LaunchedEffect(addTrigger) {
@@ -261,11 +273,10 @@ fun ListScreen(
     }
 
     fun launchGallery() {
-        tryAdd {
-            pickMedia.launch(
-                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-            )
-        }
+        // 多选相册：不预检额度（规则：可先选再在批量页决定子集 / 升级）
+        pickMedia.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+        )
     }
 
     fun launchCamera() {
@@ -587,7 +598,7 @@ fun ListScreen(
                     SheetActionRow(
                         icon = Icons.Default.PhotoLibrary,
                         title = "从相册选择",
-                        subtitle = "选择已有照片或电子收据",
+                        subtitle = "可多选，最多一次 10 张",
                         onClick = {
                             showAddSheet = false
                             launchGallery()

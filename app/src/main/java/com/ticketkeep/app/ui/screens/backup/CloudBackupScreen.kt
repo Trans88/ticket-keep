@@ -65,7 +65,7 @@ import com.ticketkeep.app.ui.components.PaperCard
  * - 已登录：备份状态 + 一键加密上传 + 备份列表；口令在上传/恢复需要时强调。
  * - 恢复：二次确认对话框 → 输入并确认口令 → 再下载解密导入。
  * - 高级：Base URL 仅 [BuildConfig.DEBUG] 可见，收入「高级」折叠，默认折叠。
- * 非 Pro 由外层导航到 Paywall，本页仍再校验。
+ * 云上传/恢复看 canUseCloud；本地高级版不自动授予云。退出账号不清本地买断。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,10 +81,6 @@ fun CloudBackupScreen(
         val msg = state.message ?: return@LaunchedEffect
         snackbar.showSnackbar(msg)
         viewModel.clearMessage()
-    }
-
-    LaunchedEffect(state.isPro) {
-        if (state.isPro == false) onNeedPro()
     }
 
     var email by remember { mutableStateOf("") }
@@ -129,20 +125,29 @@ fun CloudBackupScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
-            // Pro preview strip
-            Row(
+            // 云权益状态条（与本地高级分离）
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(13.dp))
                     .background(MaterialTheme.colorScheme.primaryContainer)
                     .padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    "Pro 权益场景预览 · 不代表免费开放",
+                    if (state.canUseCloud == true) {
+                        "云备份服务有效 · 不自动解锁本地高级版"
+                    } else {
+                        "云备份须单独开通 · 不自动解锁本地高级版"
+                    },
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
                     color = MaterialTheme.colorScheme.primary,
                 )
+                if (state.canUseCloud != true) {
+                    Spacer(Modifier.height(6.dp))
+                    TextButton(onClick = onNeedPro) {
+                        Text("查看升级与备份方案")
+                    }
+                }
             }
             Spacer(Modifier.height(12.dp))
             if (!state.isLoggedIn) {

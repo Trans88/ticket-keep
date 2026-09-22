@@ -80,6 +80,7 @@ import com.ticketkeep.app.export.TicketCsvImporter
 import com.ticketkeep.app.notification.NotificationSettingsHelper
 import com.ticketkeep.app.ui.components.PaperCard
 import com.ticketkeep.app.ui.components.SettingsRow
+import com.ticketkeep.app.ui.theme.TicketKeepRadius
 import com.ticketkeep.app.ui.theme.TicketKeepSpacing
 import kotlinx.coroutines.launch
 
@@ -295,7 +296,7 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.background,
                         ) {
                             Text(
-                                text = if (ui.isPro) "Pro" else "免费版",
+                                text = if (ui.hasLocalPremium) "本地高级" else "普通版",
                                 modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     fontSize = 10.sp,
@@ -306,7 +307,7 @@ fun SettingsScreen(
                         }
                     }
 
-                    if (!ui.isPro) {
+                    if (!ui.hasLocalPremium) {
                         Spacer(Modifier.height(14.dp))
                         val progress = (ui.totalCount.toFloat() / ui.freeLimit.toFloat())
                             .coerceIn(0f, 1f)
@@ -337,7 +338,7 @@ fun SettingsScreen(
                                     contentPadding = PaddingValues(0.dp),
                                 ) {
                                     Text(
-                                        "了解 Pro →",
+                                        "了解升级 →",
                                         style = MaterialTheme.typography.labelMedium.copy(
                                             fontSize = 12.sp,
                                         ),
@@ -355,7 +356,7 @@ fun SettingsScreen(
                         Spacer(Modifier.height(11.dp))
                         Text(
                             text = if (ChannelConfig.showProPurchase) {
-                                "需要更多空间？Pro 可以保存更多票证。"
+                                "需要更多空间？本地高级版可不限条数（不含云备份）。"
                             } else {
                                 "当前版本暂未开放会员购买。"
                             },
@@ -368,7 +369,7 @@ fun SettingsScreen(
                     } else {
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "Pro · 不限条数",
+                            "本地高级版 · 不限条数",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary,
                         )
@@ -381,18 +382,25 @@ fun SettingsScreen(
             PaperCard(modifier = Modifier.fillMaxWidth()) {
                 Column {
                     SettingsRow(
-                        title = "加密云备份 · Pro",
-                        subtitle = "手动备份，换机时找回票证",
+                        title = "加密云备份",
+                        subtitle = if (ui.canUseCloud) {
+                            "服务有效 · 手动加密备份"
+                        } else {
+                            "单独开通 · 不自动解锁本地高级版"
+                        },
                         leadingIcon = Icons.Default.Cloud,
                         onClick = {
-                            if (ui.isPro) {
-                                onOpenCloudBackup()
-                            } else if (ChannelConfig.showProPurchase) {
-                                onOpenPaywall()
-                            } else {
-                                onOpenCloudBackup()
-                            }
+                            // 始终可进入云备份页（登录/说明）；上传门禁在页内
+                            onOpenCloudBackup()
                         },
+                    )
+                    // 双状态行（本地 / 云）
+                    Text(
+                        text = "本地高级版：" + (if (ui.hasLocalPremium) "已解锁" else "未解锁") +
+                            "  ·  云备份：" + (if (ui.canUseCloud) "有效" else "未开通/已到期"),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (ChannelConfig.showProExport) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -437,34 +445,45 @@ fun SettingsScreen(
                 Spacer(Modifier.height(8.dp))
                 SectionLabel("调试")
                 PaperCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+                    Column(Modifier.padding(horizontal = 4.dp, vertical = 8.dp)) {
                         OutlinedButton(
                             onClick = {
-                                viewModel.debugSetPro(false)
+                                viewModel.debugSetLocal(true)
                                 scope.launch {
-                                    snackbarHostState.showSnackbar("已切换为普通版")
+                                    snackbarHostState.showSnackbar("已模拟本地高级版")
                                 }
                             },
-                            enabled = ui.isPro,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = 48.dp),
-                            shape = RoundedCornerShape(15.dp),
-                        ) { Text("模拟普通用户") }
+                            shape = RoundedCornerShape(TicketKeepRadius.button),
+                        ) { Text("模拟本地高级版") }
                         Spacer(Modifier.height(8.dp))
                         OutlinedButton(
                             onClick = {
-                                viewModel.debugSetPro(true)
+                                viewModel.debugSetCloud(true)
                                 scope.launch {
-                                    snackbarHostState.showSnackbar("已切换为 Pro")
+                                    snackbarHostState.showSnackbar("已模拟云备份有效")
                                 }
                             },
-                            enabled = !ui.isPro,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = 48.dp),
-                            shape = RoundedCornerShape(15.dp),
-                        ) { Text("模拟 Pro 用户") }
+                            shape = RoundedCornerShape(TicketKeepRadius.button),
+                        ) { Text("模拟云备份有效") }
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.debugAllOff()
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("已全部关闭")
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp),
+                            shape = RoundedCornerShape(TicketKeepRadius.button),
+                        ) { Text("全部关闭") }
                     }
                 }
             }

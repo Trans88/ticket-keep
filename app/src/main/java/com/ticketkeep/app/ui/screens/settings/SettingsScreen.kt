@@ -83,6 +83,10 @@ import com.ticketkeep.app.ui.components.SettingsRow
 import com.ticketkeep.app.ui.theme.TicketKeepRadius
 import com.ticketkeep.app.ui.theme.TicketKeepSpacing
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.ui.platform.LocalDensity
+import com.ticketkeep.app.ui.navigation.homeBottomBarListBottomPadding
 
 /**
  * 「我的」— 对齐 index.html `mine()`：
@@ -182,6 +186,17 @@ fun SettingsScreen(
             onError = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
         )
     }
+
+    val density = LocalDensity.current
+
+    val navBarInsetsDp = with(density) {
+
+        WindowInsets.navigationBars.getBottom(this).toDp()
+
+    }
+
+    val settingsBottomPad = homeBottomBarListBottomPadding(navBarInsetsDp)
+
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -500,7 +515,7 @@ fun SettingsScreen(
                 "v${BuildConfig.VERSION_NAME}",
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 32.dp, top = 4.dp),
+                    .padding(bottom = settingsBottomPad, top = 4.dp),
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -133,6 +133,10 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.ui.platform.LocalDensity
+import com.ticketkeep.app.ui.navigation.homeBottomBarListBottomPadding
 
 /**
  * 票证首页 — 对齐 index.html `home()`：
@@ -306,6 +310,17 @@ fun ListScreen(
     val isFirstEmpty = state.totalCount == 0 && !state.isFilterOrSearchActive
     val showHero = !state.isFilterOrSearchActive && state.query.isBlank() // design SoT: hero always, even 0
 
+    val density = LocalDensity.current
+
+    val navBarInsetsDp = with(density) {
+
+        WindowInsets.navigationBars.getBottom(this).toDp()
+
+    }
+
+    val listBottomPad = homeBottomBarListBottomPadding(navBarInsetsDp)
+
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -315,7 +330,7 @@ fun ListScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .padding(horizontal = TicketKeepSpacing.page),
-            contentPadding = PaddingValues(bottom = 24.dp),
+            contentPadding = PaddingValues(bottom = listBottomPad),
         ) {
             // 整页正文同一 LazyColumn：顶栏/英雄卡/搜索筛选/分区头/列表同滚；底栏在外层固定。
             item(key = "home_header") {

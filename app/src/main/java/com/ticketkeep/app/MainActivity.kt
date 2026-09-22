@@ -52,6 +52,10 @@ import kotlinx.coroutines.delay
 import com.ticketkeep.app.ui.screens.batch.BatchImportSession
 import com.ticketkeep.app.ui.screens.batch.BatchReviewScreen
 import javax.inject.Inject
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalDensity
 
 /**
  * 应用唯一 Activity：Compose 导航、Splash、通知深链与权限请求入口。
@@ -113,26 +117,17 @@ class MainActivity : ComponentActivity() {
                             containerColor = MaterialTheme.colorScheme.background,
                             // 避免与子页 TopAppBar/statusBarsPadding 叠两层状态栏空白
                             contentWindowInsets = WindowInsets(0, 0, 0, 0),
-                            bottomBar = {
-                                if (showBottomBar) {
-                                    HomeBottomBar(
-                                        currentRoute = currentRoute,
-                                        onSelectList = { navigateTab(Routes.LIST) },
-                                        onSelectSettings = { navigateTab(Routes.SETTINGS) },
-                                        onAdd = {
-                                            if (currentRoute != Routes.LIST) {
-                                                navigateTab(Routes.LIST)
-                                            }
-                                            addTrigger += 1
-                                        },
-                                    )
-                                }
-                            },
+                            bottomBar = {},
                         ) { innerPadding ->
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(innerPadding),
+                            ) {
                             NavHost(
                                 navController = navController,
                                 startDestination = Routes.LIST,
-                                modifier = Modifier.padding(innerPadding),
+                                modifier = Modifier.fillMaxSize(),
                             ) {
                                 composable(Routes.LIST) {
                                     ListScreen(
@@ -222,7 +217,23 @@ class MainActivity : ComponentActivity() {
                                     PrivacyPolicyScreen(onBack = { navController.popBackStack() })
                                 }
                             }
-                        }
+                        
+                            val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+                            if (showBottomBar && !imeVisible) {
+                                HomeBottomBar(
+                                    modifier = Modifier.align(Alignment.BottomCenter),
+                                    currentRoute = currentRoute,
+                                    onSelectList = { navigateTab(Routes.LIST) },
+                                    onSelectSettings = { navigateTab(Routes.SETTINGS) },
+                                    onAdd = {
+                                        if (currentRoute != Routes.LIST) {
+                                            navigateTab(Routes.LIST)
+                                        }
+                                        addTrigger += 1
+                                    },
+                                )
+                            }
+                            }}
 
                         if (openTicketId > 0) {
                             LaunchedEffect(openTicketId) {

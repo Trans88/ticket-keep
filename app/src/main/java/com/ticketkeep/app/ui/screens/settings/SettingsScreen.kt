@@ -84,6 +84,9 @@ import com.ticketkeep.app.ui.theme.TicketKeepRadius
 import com.ticketkeep.app.ui.theme.TicketKeepSpacing
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.ui.platform.LocalDensity
 import com.ticketkeep.app.ui.navigation.homeBottomBarListBottomPadding
@@ -200,6 +203,7 @@ fun SettingsScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         Column(

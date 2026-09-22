@@ -134,6 +134,9 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.ui.platform.LocalDensity
 import com.ticketkeep.app.ui.navigation.homeBottomBarListBottomPadding
@@ -323,6 +326,8 @@ fun ListScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        // Header owns status-bar padding; measured dock padding owns the bottom inset.
+        contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         LazyColumn(

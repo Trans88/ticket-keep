@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +37,11 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.ticketkeep.app.notification.WarrantyReminderWorker
 import com.ticketkeep.app.ui.navigation.HomeBottomBar
+import com.ticketkeep.app.ui.navigation.HomeBottomBarContainerMinHeight
+import com.ticketkeep.app.ui.navigation.LocalHomeBottomBarHeight
+import com.ticketkeep.app.ui.navigation.rememberHomeGlassBlurEnabled
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.haze
 import com.ticketkeep.app.ui.navigation.Routes
 import com.ticketkeep.app.ui.navigation.shouldShowHomeBottomBar
 import com.ticketkeep.app.ui.screens.backup.CloudBackupScreen
@@ -91,6 +97,11 @@ class MainActivity : ComponentActivity() {
                         val navBackStackEntry by navController.currentBackStackEntryAsState()
                         val currentRoute = navBackStackEntry?.destination?.route
                         val showBottomBar = shouldShowHomeBottomBar(currentRoute)
+                        val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+                        val dockVisible = showBottomBar && !imeVisible
+                        val glassState = remember { HazeState() }
+                        val glassBlurEnabled = rememberHomeGlassBlurEnabled()
+                        var dockHeight by remember { mutableStateOf(HomeBottomBarContainerMinHeight) }
                         val activity = LocalContext.current as? Activity
                         /** 递增后 ListScreen 打开添加面板（底栏中心按钮） */
                         var addTrigger by remember { mutableIntStateOf(0) }
@@ -124,10 +135,15 @@ class MainActivity : ComponentActivity() {
                                     .fillMaxSize()
                                     .padding(innerPadding),
                             ) {
+                            CompositionLocalProvider(LocalHomeBottomBarHeight provides dockHeight) {
                             NavHost(
                                 navController = navController,
                                 startDestination = Routes.LIST,
-                                modifier = Modifier.fillMaxSize(),
+                                // Capture only page content, never the dock itself (no feedback loop).
+                                modifier = Modifier.fillMaxSize().then(
+                                    if (dockVisible && glassBlurEnabled) Modifier.haze(glassState)
+                                    else Modifier,
+                                ),
                             ) {
                                 composable(Routes.LIST) {
                                     ListScreen(
@@ -218,9 +234,11 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         
-                            val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-                            if (showBottomBar && !imeVisible) {
+                            if (dockVisible) {
                                 HomeBottomBar(
+                                    glassState = glassState,
+                                    blurEnabled = glassBlurEnabled,
+                                    onContainerHeightChanged = { dockHeight = it },
                                     modifier = Modifier.align(Alignment.BottomCenter),
                                     currentRoute = currentRoute,
                                     onSelectList = { navigateTab(Routes.LIST) },
@@ -233,7 +251,9 @@ class MainActivity : ComponentActivity() {
                                     },
                                 )
                             }
-                            }}
+                            }
+                            }
+                        }
 
                         if (openTicketId > 0) {
                             LaunchedEffect(openTicketId) {
